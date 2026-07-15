@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { connectGoogleCalendar } from "@/lib/google/calendar";
-import { verifyGoogleOAuthState } from "@/lib/google/oauth";
+import { appBaseUrl, verifyGoogleOAuthState } from "@/lib/google/oauth";
 
 export const runtime = "nodejs";
 
@@ -9,7 +9,7 @@ export async function GET(request: Request) {
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   const error = url.searchParams.get("error");
-  const base = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+  const base = appBaseUrl();
 
   if (error || !code || !state) {
     return NextResponse.redirect(
