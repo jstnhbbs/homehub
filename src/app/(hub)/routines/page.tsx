@@ -13,6 +13,7 @@ import {
   routines,
   routineSteps,
 } from "@/db/schema";
+import { groupBy } from "@/lib/group-by";
 import { localDateIn } from "@/lib/dates";
 import { requireHousehold } from "@/lib/household";
 
@@ -58,7 +59,7 @@ export default async function RoutinesPage() {
   ]);
   const done = new Set(doneRows.map((row) => row.stepId));
   const profileMap = new Map(familyProfiles.map((profile) => [profile.id, profile]));
-  const grouped = Map.groupBy(routineRows, (row) => row.routineId);
+  const grouped = groupBy(routineRows, (row) => row.routineId);
 
   return (
     <div className="mx-auto max-w-[1400px]">
