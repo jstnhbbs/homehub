@@ -8,6 +8,7 @@ An iPad-first family dashboard for Apple calendars, routines, chores, and weekly
 - Turso/libSQL with Drizzle ORM
 - Better Auth for parent accounts
 - iCloud CalDAV for private, two-way calendar sync
+- Vercel Blob for child profile photos
 - Vitest and Playwright
 
 ## Local setup
@@ -46,8 +47,9 @@ The app-specific password is encrypted with AES-256-GCM before it is stored. Nev
 1. Create a Turso database and token.
 2. Set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` locally, then run `npm run db:migrate`.
 3. Import the repository in Vercel.
-4. Add every variable from `.env.example` to Vercel. Set `BETTER_AUTH_URL` and trusted origins to the production HTTPS URL.
-5. Deploy. The daily cron works on Vercel Hobby; an active wall display also requests a freshness-limited sync every five minutes.
+4. In the Vercel project, create a Blob store and connect it to the project. Vercel adds `BLOB_READ_WRITE_TOKEN` automatically.
+5. Add every remaining variable from `.env.example` to Vercel. Set `BETTER_AUTH_URL` and trusted origins to the production HTTPS URL.
+6. Deploy. The daily cron works on Vercel Hobby; an active wall display also requests a freshness-limited sync every five minutes.
 
 `CALENDAR_ENCRYPTION_KEY` must remain stable after calendars are connected. Changing it makes saved credentials unreadable.
 

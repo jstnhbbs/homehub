@@ -31,6 +31,11 @@ test("a parent can create a household and use the hub", async ({ page }) => {
   await page.getByPlaceholder("Feed the dog").fill("Set the table");
   await page.getByRole("button", { name: "Add chore" }).click();
   await expect(page.getByText("Set the table")).toBeVisible();
+
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Photo", exact: true }),
+  ).toBeVisible();
 });
 
 test("the sign-in screen fits the active viewport", async ({ page }) => {

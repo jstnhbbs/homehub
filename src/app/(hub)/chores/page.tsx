@@ -2,6 +2,7 @@ import { asc, eq } from "drizzle-orm";
 import { Plus, Sparkles } from "lucide-react";
 import { addChore, toggleChore } from "@/app/actions";
 import { CheckItem } from "@/components/check-item";
+import { ProfileAvatar } from "@/components/profile-avatar";
 import { db } from "@/db/client";
 import { choreCompletions, chores, profiles } from "@/db/schema";
 import { localDateIn, weekKey } from "@/lib/dates";
@@ -35,8 +36,9 @@ export default async function ChoresPage() {
       id: profile.id,
       name: profile.name,
       color: profile.color,
+      avatar: profile.avatar,
     })),
-    { id: null, name: "Family", color: "#4f7c6d" },
+    { id: null, name: "Family", color: "#4f7c6d", avatar: "sparkles" },
   ];
 
   return (
@@ -67,12 +69,13 @@ export default async function ChoresPage() {
                 className="hub-card p-5 max-md:p-4"
               >
                 <div className="flex items-center gap-3">
-                  <div
-                    className="flex h-12 w-12 items-center justify-center rounded-full text-lg font-bold text-white"
-                    style={{ background: group.color }}
-                  >
-                    {group.name[0]}
-                  </div>
+                  <ProfileAvatar
+                    name={group.name}
+                    avatar={group.avatar}
+                    color={group.color}
+                    size={48}
+                    className="text-lg"
+                  />
                   <div>
                     <h2 className="font-display text-2xl font-semibold">
                       {group.name}

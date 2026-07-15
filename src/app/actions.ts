@@ -19,6 +19,10 @@ import {
   routineSteps,
 } from "@/db/schema";
 import { requireHousehold, requireUser } from "@/lib/household";
+import {
+  removeProfilePhotoForHousehold,
+  saveProfilePhotoForHousehold,
+} from "@/lib/profile-photo";
 
 function text(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
@@ -97,6 +101,25 @@ export async function addProfile(formData: FormData) {
     householdId: household.id,
     name,
     color,
+  });
+  revalidatePath("/", "layout");
+}
+
+export async function setProfilePhoto(profileId: string, url: string) {
+  const household = await requireHousehold();
+  await saveProfilePhotoForHousehold({
+    householdId: household.id,
+    profileId: z.string().uuid().parse(profileId),
+    url: z.string().url().parse(url),
+  });
+  revalidatePath("/", "layout");
+}
+
+export async function removeProfilePhoto(profileId: string) {
+  const household = await requireHousehold();
+  await removeProfilePhotoForHousehold({
+    householdId: household.id,
+    profileId: z.string().uuid().parse(profileId),
   });
   revalidatePath("/", "layout");
 }

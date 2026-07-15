@@ -11,6 +11,7 @@ import Link from "next/link";
 import { toggleChore, toggleRoutineStep } from "@/app/actions";
 import { CalendarSync } from "@/components/calendar-sync";
 import { CheckItem } from "@/components/check-item";
+import { ProfileAvatar } from "@/components/profile-avatar";
 import { db } from "@/db/client";
 import {
   calendarConnections,
@@ -290,12 +291,13 @@ export default async function DashboardPage() {
           <div className="mt-5 flex flex-wrap items-center gap-4">
             {familyProfiles.map((profile) => (
               <div key={profile.id} className="text-center">
-                <div
-                  className="mx-auto flex h-16 w-16 items-center justify-center rounded-full text-xl font-extrabold text-white"
-                  style={{ background: profile.color }}
-                >
-                  {profile.name.slice(0, 1).toUpperCase()}
-                </div>
+                <ProfileAvatar
+                  name={profile.name}
+                  avatar={profile.avatar}
+                  color={profile.color}
+                  size={64}
+                  className="mx-auto text-xl"
+                />
                 <p className="mt-2 text-sm font-bold">{profile.name}</p>
               </div>
             ))}

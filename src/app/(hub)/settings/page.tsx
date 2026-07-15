@@ -2,6 +2,11 @@ import { asc, eq } from "drizzle-orm";
 import { CalendarDays, Copy, Plus, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { addProfile } from "@/app/actions";
+import {
+  hasProfilePhoto,
+  ProfileAvatar,
+} from "@/components/profile-avatar";
+import { ProfilePhotoUpload } from "@/components/profile-photo-upload";
 import { SignOutButton } from "@/components/sign-out-button";
 import { db } from "@/db/client";
 import { profiles } from "@/db/schema";
@@ -37,15 +42,23 @@ export default async function SettingsPage() {
             {familyProfiles.map((profile) => (
               <div
                 key={profile.id}
-                className="flex items-center gap-3 rounded-2xl border border-[var(--line)] bg-white/60 p-3 pr-5"
+                className="flex min-w-[240px] flex-1 items-center gap-3 rounded-2xl border border-[var(--line)] bg-white/60 p-3"
               >
-                <span
-                  className="flex h-10 w-10 items-center justify-center rounded-full font-bold text-white"
-                  style={{ background: profile.color }}
-                >
-                  {profile.name[0]}
-                </span>
-                <span className="font-bold">{profile.name}</span>
+                <ProfileAvatar
+                  name={profile.name}
+                  avatar={profile.avatar}
+                  color={profile.color}
+                  size={48}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-bold">{profile.name}</p>
+                  <div className="mt-1.5">
+                    <ProfilePhotoUpload
+                      profileId={profile.id}
+                      hasPhoto={hasProfilePhoto(profile.avatar)}
+                    />
+                  </div>
+                </div>
               </div>
             ))}
           </div>
