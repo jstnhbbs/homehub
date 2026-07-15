@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, lt } from "drizzle-orm";
+import { and, eq, inArray, lt, lte } from "drizzle-orm";
 import { DAVClient, type DAVCalendar } from "tsdav";
 import { db } from "@/db/client";
 import {
@@ -10,6 +10,7 @@ import {
 } from "@/db/schema";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
 import { parseIcalEvent } from "./ical";
+import { staleCalendarEventIds } from "./reconcile";
 
 const ICLOUD_URL = "https://caldav.icloud.com";
 const FRESH_FOR_MS = 5 * 60 * 1000;
@@ -167,6 +168,7 @@ export async function syncHouseholdCalendars(
 
     const rangeStart = new Date(now - 45 * 24 * 60 * 60 * 1000);
     const rangeEnd = new Date(now + 370 * 24 * 60 * 60 * 1000);
+    const syncStartedAt = new Date(now);
     let count = 0;
     for (const localCalendar of selected) {
       const remoteCalendar = {
@@ -183,37 +185,77 @@ export async function syncHouseholdCalendars(
           end: rangeEnd.toISOString(),
         },
       });
-      for (const object of objects) {
-        if (!object.data || !object.url) continue;
+      const normalizedObjects = objects.flatMap((object) => {
+        if (!object.data || !object.url) return [];
         try {
-          const parsed = parseIcalEvent(
-            object.data,
-            household[0].timezone,
-          );
-          await db
+          return [
+            {
+              href: object.url,
+              etag: object.etag,
+              rawIcal: object.data,
+              parsed: parseIcalEvent(
+                object.data,
+                household[0].timezone,
+              ),
+            },
+          ];
+        } catch {
+          // Ignore non-event calendar objects without leaking calendar content.
+          return [];
+        }
+      });
+      const remoteHrefs = new Set(
+        normalizedObjects.map((object) => object.href),
+      );
+      const cachedEvents = await db
+        .select({
+          id: calendarEvents.id,
+          href: calendarEvents.href,
+          updatedAt: calendarEvents.updatedAt,
+        })
+        .from(calendarEvents)
+        .where(eq(calendarEvents.calendarId, localCalendar.id));
+      const staleIds = staleCalendarEventIds(
+        cachedEvents,
+        remoteHrefs,
+        syncStartedAt,
+      );
+
+      await db.transaction(async (tx) => {
+        for (const object of normalizedObjects) {
+          await tx
             .insert(calendarEvents)
             .values({
               id: randomUUID(),
               calendarId: localCalendar.id,
-              href: object.url,
+              href: object.href,
               etag: object.etag,
-              rawIcal: object.data,
-              ...parsed,
+              rawIcal: object.rawIcal,
+              ...object.parsed,
             })
             .onConflictDoUpdate({
               target: [calendarEvents.calendarId, calendarEvents.href],
               set: {
                 etag: object.etag,
-                rawIcal: object.data,
-                ...parsed,
+                rawIcal: object.rawIcal,
+                ...object.parsed,
                 updatedAt: new Date(),
               },
             });
           count += 1;
-        } catch {
-          // Ignore non-event calendar objects without leaking calendar content.
         }
-      }
+        for (let index = 0; index < staleIds.length; index += 200) {
+          await tx
+            .delete(calendarEvents)
+            .where(
+              and(
+                eq(calendarEvents.calendarId, localCalendar.id),
+                inArray(calendarEvents.id, staleIds.slice(index, index + 200)),
+                lte(calendarEvents.updatedAt, syncStartedAt),
+              ),
+            );
+        }
+      });
     }
 
     await db
