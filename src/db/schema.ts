@@ -120,13 +120,26 @@ export const profiles = sqliteTable(
     householdId: text("household_id")
       .notNull()
       .references(() => households.id, { onDelete: "cascade" }),
+    userId: text("user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    profileType: text("profile_type", { enum: ["adult", "child"] })
+      .notNull()
+      .default("child"),
     name: text("name").notNull(),
     color: text("color").notNull().default("#4f7c6d"),
     avatar: text("avatar").notNull().default("sparkles"),
+    birthday: text("birthday"),
     sortOrder: integer("sort_order").notNull().default(0),
     ...timestamps,
   },
-  (table) => [index("profiles_household_idx").on(table.householdId)],
+  (table) => [
+    index("profiles_household_idx").on(table.householdId),
+    uniqueIndex("profiles_household_user_idx").on(
+      table.householdId,
+      table.userId,
+    ),
+  ],
 );
 
 export const routines = sqliteTable(

@@ -25,6 +25,10 @@ import {
   routines,
   routineSteps,
 } from "@/db/schema";
+import {
+  birthdayEventsInRange,
+  upcomingBirthdays,
+} from "@/lib/birthdays";
 import { expandIcalEvent } from "@/lib/caldav/ical";
 import { localDateIn, weekKey } from "@/lib/dates";
 import { requireHousehold } from "@/lib/household";
@@ -124,8 +128,8 @@ export default async function DashboardPage() {
 
   const doneSteps = new Set(routineDone.map((item) => item.stepId));
   const profileMap = new Map(familyProfiles.map((profile) => [profile.id, profile]));
-  const schedule = eventRows
-    .flatMap((event) =>
+  const schedule = [
+    ...eventRows.flatMap((event) =>
       expandIcalEvent(
         event.rawIcal,
         dayStart,
@@ -137,8 +141,15 @@ export default async function DashboardPage() {
         color: event.color,
         calendarName: event.calendarName,
       })),
-    )
-    .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+    ),
+    ...birthdayEventsInRange(
+      familyProfiles,
+      localDate,
+      localDate,
+      household.timezone,
+    ),
+  ].sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  const birthdayReminders = upcomingBirthdays(familyProfiles, localDate);
   const currentConnection = connectionRows[0];
   const mealSlots = ["breakfast", "lunch", "dinner", "snack"] as const;
 
@@ -310,6 +321,21 @@ export default async function DashboardPage() {
               <EmptyState text="Add child profiles in settings." href="/settings" />
             )}
           </div>
+          {birthdayReminders.length > 0 && (
+            <div className="mt-5 space-y-2 border-t border-[var(--line)] pt-4">
+              {birthdayReminders.slice(0, 2).map(({ profile, daysUntil }) => (
+                <Link
+                  key={profile.id}
+                  href={`/settings/profiles/${profile.id}`}
+                  className="block rounded-xl bg-[var(--sun-soft)] px-3 py-2 text-sm font-bold"
+                >
+                  {daysUntil === 0
+                    ? `🎉 ${profile.name}’s birthday is today!`
+                    : `🎂 ${profile.name}’s birthday is in ${daysUntil} day${daysUntil === 1 ? "" : "s"}`}
+                </Link>
+              ))}
+            </div>
+          )}
         </section>
       </div>
     </div>

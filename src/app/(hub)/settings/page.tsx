@@ -1,7 +1,8 @@
 import { asc, eq } from "drizzle-orm";
-import { CalendarDays, Copy, Plus, ShieldCheck } from "lucide-react";
+import { CalendarDays, Copy, Pencil, Plus, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import { addProfile } from "@/app/actions";
+import { ProfileColorPicker } from "@/components/profile-color-picker";
 import {
   hasProfilePhoto,
   ProfileAvatar,
@@ -12,18 +13,6 @@ import { db } from "@/db/client";
 import { profiles } from "@/db/schema";
 import { requireHousehold } from "@/lib/household";
 
-const colors = [
-  { value: "#d87861", label: "Coral" },
-  { value: "#6689a3", label: "Blue" },
-  { value: "#4f7c6d", label: "Sage" },
-  { value: "#b07aa1", label: "Plum" },
-  { value: "#d19b45", label: "Gold" },
-  { value: "#5f8f8b", label: "Teal" },
-  { value: "#8c7ca8", label: "Lavender" },
-  { value: "#b86f4d", label: "Terracotta" },
-  { value: "#7f8757", label: "Olive" },
-];
-
 export default async function SettingsPage() {
   const household = await requireHousehold();
   const familyProfiles = await db
@@ -31,6 +20,12 @@ export default async function SettingsPage() {
     .from(profiles)
     .where(eq(profiles.householdId, household.id))
     .orderBy(asc(profiles.sortOrder));
+  const adultProfiles = familyProfiles.filter(
+    (profile) => profile.profileType === "adult",
+  );
+  const childProfiles = familyProfiles.filter(
+    (profile) => profile.profileType === "child",
+  );
 
   return (
     <div className="mx-auto max-w-5xl pb-10">
@@ -48,66 +43,40 @@ export default async function SettingsPage() {
       <div className="mt-6 grid grid-cols-2 gap-5 max-md:mt-4 max-md:grid-cols-1 max-md:gap-3">
         <section className="hub-card p-6 max-md:p-4">
           <h2 className="font-display text-2xl font-semibold">Family profiles</h2>
-          <div className="mt-5 flex flex-wrap gap-4">
-            {familyProfiles.map((profile) => (
-              <div
-                key={profile.id}
-                className="flex min-w-[240px] flex-1 items-center gap-3 rounded-2xl border border-[var(--line)] bg-white/60 p-3"
-              >
-                <ProfileAvatar
-                  name={profile.name}
-                  avatar={profile.avatar}
-                  color={profile.color}
-                  size={48}
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-bold">{profile.name}</p>
-                  <div className="mt-1.5">
-                    <ProfilePhotoUpload
-                      profileId={profile.id}
-                      hasPhoto={hasProfilePhoto(profile.avatar)}
-                    />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <ProfileList title="Adults" profiles={adultProfiles} />
+          <ProfileList title="Children" profiles={childProfiles} />
           <form
             action={addProfile}
             className="mt-6 grid gap-3"
           >
             <label className="min-w-0">
-              <span className="mb-1 block text-xs font-bold">Add a child</span>
+              <span className="mb-1 block text-xs font-bold">
+                Add a family member
+              </span>
               <input name="name" className="hub-input" placeholder="Name" required />
             </label>
             <fieldset>
-              <legend className="mb-2 text-xs font-bold">Profile color</legend>
-              <div className="flex flex-wrap gap-2.5">
-                {colors.map((color, index) => (
-                  <label
-                    key={color.value}
-                    className="cursor-pointer"
-                    title={color.label}
-                  >
+              <legend className="mb-2 text-xs font-bold">Profile type</legend>
+              <div className="flex gap-2">
+                {(["adult", "child"] as const).map((profileType) => (
+                  <label key={profileType} className="cursor-pointer">
                     <input
                       type="radio"
-                      name="color"
-                      value={color.value}
-                      defaultChecked={index === 0}
+                      name="profileType"
+                      value={profileType}
+                      defaultChecked={profileType === "child"}
                       className="peer sr-only"
                     />
-                    <span
-                      className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-white ring-1 ring-[var(--line)] transition peer-checked:ring-4 peer-checked:ring-[var(--foreground)]/30"
-                      style={{ background: color.value }}
-                    >
-                      <span className="sr-only">{color.label}</span>
+                    <span className="block rounded-xl border border-[var(--line)] px-4 py-2 text-sm font-bold capitalize peer-checked:border-[var(--sage)] peer-checked:bg-[var(--sage-soft)]">
+                      {profileType}
                     </span>
                   </label>
                 ))}
               </div>
             </fieldset>
+            <ProfileColorPicker />
             <button className="hub-button w-fit px-5">
-              <Plus size={18} /> Add child
+              <Plus size={18} /> Add family member
             </button>
           </form>
         </section>
@@ -154,6 +123,66 @@ export default async function SettingsPage() {
             </span>
           </div>
         </section>
+      </div>
+    </div>
+  );
+}
+
+function ProfileList({
+  title,
+  profiles: profileList,
+}: {
+  title: string;
+  profiles: (typeof profiles.$inferSelect)[];
+}) {
+  return (
+    <div className="mt-5">
+      <h3 className="text-xs font-extrabold uppercase tracking-[0.14em] text-[var(--muted)]">
+        {title}
+      </h3>
+      <div className="mt-2 flex flex-wrap gap-3">
+        {profileList.map((profile) => (
+          <div
+            key={profile.id}
+            className="flex min-w-[240px] flex-1 items-center gap-3 rounded-2xl border border-[var(--line)] bg-white/60 p-3"
+          >
+            <ProfileAvatar
+              name={profile.name}
+              avatar={profile.avatar}
+              color={profile.color}
+              size={48}
+            />
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-bold">{profile.name}</p>
+              {profile.birthday && (
+                <p className="mt-0.5 text-xs text-[var(--muted)]">
+                  Birthday:{" "}
+                  {new Intl.DateTimeFormat("en-US", {
+                    month: "long",
+                    day: "numeric",
+                    timeZone: "UTC",
+                  }).format(new Date(`${profile.birthday}T12:00:00Z`))}
+                </p>
+              )}
+              <div className="mt-1.5">
+                <ProfilePhotoUpload
+                  profileId={profile.id}
+                  hasPhoto={hasProfilePhoto(profile.avatar)}
+                />
+              </div>
+            </div>
+            <Link
+              href={`/settings/profiles/${profile.id}`}
+              className="rounded-full p-2 text-[var(--muted)] transition hover:bg-white hover:text-[var(--foreground)]"
+              aria-label={`Edit ${profile.name}`}
+            >
+              <Pencil size={17} />
+            </Link>
+          </div>
+        ))}
+        {profileList.length === 0 && (
+          <p className="text-sm text-[var(--muted)]">None added yet.</p>
+        )}
       </div>
     </div>
   );

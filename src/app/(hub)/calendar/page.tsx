@@ -9,7 +9,9 @@ import {
   calendarConnections,
   calendarEvents,
   calendars,
+  profiles,
 } from "@/db/schema";
+import { birthdayEventsInRange } from "@/lib/birthdays";
 import { expandIcalEvent } from "@/lib/caldav/ical";
 import { weekDates } from "@/lib/dates";
 import { requireHousehold } from "@/lib/household";
@@ -27,7 +29,8 @@ export default async function CalendarPage() {
   const rangeStart = fromZonedTime(`${firstDate}T00:00:00`, household.timezone);
   const rangeEnd = fromZonedTime(`${lastDate}T23:59:59`, household.timezone);
 
-  const [connections, calendarList, cachedEvents] = await Promise.all([
+  const [connections, calendarList, cachedEvents, familyProfiles] =
+    await Promise.all([
     db
       .select()
       .from(calendarConnections)
@@ -71,23 +74,43 @@ export default async function CalendarPage() {
           eq(calendars.enabled, true),
         ),
       ),
-  ]);
+      db
+        .select({
+          id: profiles.id,
+          name: profiles.name,
+          color: profiles.color,
+          birthday: profiles.birthday,
+        })
+        .from(profiles)
+        .where(eq(profiles.householdId, household.id)),
+    ]);
   const connection = connections[0];
-  const occurrences = cachedEvents.flatMap((event) =>
-    expandIcalEvent(
-      event.rawIcal,
-      rangeStart,
-      rangeEnd,
-      household.timezone,
-    ).map((occurrence) => ({
-      ...occurrence,
-      eventId: event.id,
-      calendarId: event.calendarId,
-      color: event.color,
-      calendarName: event.calendarName,
-      location: occurrence.location || event.location,
-    })),
+  const birthdayOccurrences = birthdayEventsInRange(
+    familyProfiles,
+    firstDate,
+    lastDate,
+    household.timezone,
   );
+  const occurrences = [
+    ...cachedEvents.flatMap((event) =>
+      expandIcalEvent(
+        event.rawIcal,
+        rangeStart,
+        rangeEnd,
+        household.timezone,
+      ).map((occurrence) => ({
+        ...occurrence,
+        eventId: event.id,
+        calendarId: event.calendarId,
+        color: event.color,
+        calendarName: event.calendarName,
+        location: occurrence.location || event.location,
+        isBirthday: false as const,
+        profileId: null,
+      })),
+    ),
+    ...birthdayOccurrences,
+  ];
 
   return (
     <div className="mx-auto max-w-[1500px]">
@@ -106,7 +129,7 @@ export default async function CalendarPage() {
         />
       </div>
 
-      {!connection ? (
+      {!connection && birthdayOccurrences.length === 0 ? (
         <section className="hub-card mt-6 flex min-h-[430px] flex-col items-center justify-center p-8 text-center">
           <CalendarPlus size={42} className="text-[var(--sage)]" />
           <h2 className="font-display mt-4 text-3xl font-semibold">
@@ -174,6 +197,15 @@ export default async function CalendarPage() {
                               <MapPin size={12} /> {event.location}
                             </p>
                           )}
+                          {event.isBirthday ? (
+                            <Link
+                              href={`/settings/profiles/${event.profileId}`}
+                              className="mt-3 block rounded-lg bg-white px-3 py-2 text-center font-bold"
+                            >
+                              Edit family profile
+                            </Link>
+                          ) : (
+                          <>
                           <form action={updateCalendarEvent} className="mt-3 space-y-2">
                             <input type="hidden" name="eventId" value={event.eventId} />
                             <input type="hidden" name="calendarId" value={event.calendarId} />
@@ -199,6 +231,8 @@ export default async function CalendarPage() {
                               <Trash2 size={12} /> Delete
                             </button>
                           </form>
+                          </>
+                          )}
                         </details>
                       ))}
                     </div>
@@ -207,6 +241,7 @@ export default async function CalendarPage() {
               })}
             </div>
           </section>
+          {connection ? (
           <aside className="hub-card h-fit p-5 max-md:p-4">
             <div className="flex items-center gap-2">
               <CalendarPlus size={20} className="text-[var(--sage)]" />
@@ -252,6 +287,24 @@ export default async function CalendarPage() {
               <button className="hub-button w-full">Add to iCloud</button>
             </form>
           </aside>
+          ) : (
+            <aside className="hub-card h-fit p-5 text-center max-md:p-4">
+              <CalendarPlus
+                size={32}
+                className="mx-auto text-[var(--sage)]"
+              />
+              <h2 className="font-display mt-3 text-2xl font-semibold">
+                Add Apple Calendar
+              </h2>
+              <p className="mt-2 text-sm text-[var(--muted)]">
+                Family birthdays are already shown. Connect iCloud to add the
+                rest of your schedule.
+              </p>
+              <Link href="/settings/calendar" className="hub-button mt-5">
+                Connect calendar
+              </Link>
+            </aside>
+          )}
         </div>
       )}
     </div>

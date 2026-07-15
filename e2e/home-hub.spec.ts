@@ -2,6 +2,20 @@ import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 
 test("a parent can create a household and use the hub", async ({ page }) => {
+  const birthdayParts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Chicago",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const birthdayMonth = birthdayParts.find((part) => part.type === "month")!.value;
+  const birthdayDay = birthdayParts.find((part) => part.type === "day")!.value;
+  const birthday = `2020-${birthdayMonth}-${birthdayDay}`;
+  const birthdayLabel = new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${birthday}T12:00:00Z`));
+
   await page.goto("/sign-in");
   await page.getByRole("button", { name: /create an account/i }).click();
   await page.getByLabel("Your name").fill("Jamie");
@@ -35,7 +49,26 @@ test("a parent can create a household and use the hub", async ({ page }) => {
   await page.getByRole("link", { name: "Settings", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Photo", exact: true }),
-  ).toBeVisible();
+  ).toHaveCount(2);
+  await expect(page.getByRole("link", { name: "Edit Jamie" })).toBeVisible();
+
+  await page.getByPlaceholder("Name").fill("Taylor");
+  await page.getByText("adult", { exact: true }).click();
+  await page.getByRole("button", { name: "Add family member" }).click();
+  await expect(page.getByRole("link", { name: "Edit Taylor" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Edit Alex" }).click();
+  await page.getByLabel("Name").fill("Avery");
+  await page.getByLabel("Birthday").fill(birthday);
+  await page.getByTitle("Lavender").click();
+  await page.getByRole("button", { name: "Save changes" }).click();
+
+  await expect(page).toHaveURL(/settings$/);
+  await expect(page.getByText("Avery")).toBeVisible();
+  await expect(page.getByText(`Birthday: ${birthdayLabel}`)).toBeVisible();
+
+  await page.getByRole("link", { name: "Calendar", exact: true }).click();
+  await expect(page.getByText("Avery’s birthday")).toBeVisible();
 });
 
 test("the sign-in screen fits the active viewport", async ({ page }) => {

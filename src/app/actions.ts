@@ -18,7 +18,9 @@ import {
   routines,
   routineSteps,
 } from "@/db/schema";
+import { localDateIn } from "@/lib/dates";
 import { requireHousehold, requireUser } from "@/lib/household";
+import { isProfileColor } from "@/lib/profile-colors";
 import {
   removeProfilePhotoForHousehold,
   saveProfilePhotoForHousehold,
@@ -94,15 +96,76 @@ export async function addProfile(formData: FormData) {
   const name = shortText.parse(text(formData, "name"));
   const color = z
     .string()
-    .regex(/^#[0-9a-f]{6}$/i)
+    .refine(isProfileColor)
     .parse(text(formData, "color") || "#6689a3");
+  const profileType = z
+    .enum(["adult", "child"])
+    .parse(text(formData, "profileType") || "child");
   await db.insert(profiles).values({
     id: randomUUID(),
     householdId: household.id,
     name,
     color,
+    profileType,
   });
   revalidatePath("/", "layout");
+}
+
+export async function updateProfile(profileId: string, formData: FormData) {
+  const household = await requireHousehold();
+  const id = z.string().uuid().parse(profileId);
+  const birthdayValue = text(formData, "birthday");
+  const input = z
+    .object({
+      name: shortText,
+      color: z.string().refine(isProfileColor, "Choose a valid profile color."),
+      birthday: z.iso.date().nullable(),
+      profileType: z.enum(["adult", "child"]),
+    })
+    .parse({
+      name: text(formData, "name"),
+      color: text(formData, "color"),
+      birthday: birthdayValue || null,
+      profileType: text(formData, "profileType"),
+    });
+
+  if (
+    input.birthday &&
+    input.birthday > localDateIn(household.timezone)
+  ) {
+    throw new Error("Birthday cannot be in the future.");
+  }
+
+  const existingProfile = await db
+    .select({ userId: profiles.userId })
+    .from(profiles)
+    .where(
+      and(
+        eq(profiles.id, id),
+        eq(profiles.householdId, household.id),
+      ),
+    )
+    .limit(1);
+  if (!existingProfile[0]) throw new Error("Profile not found.");
+
+  await db
+    .update(profiles)
+    .set({
+      name: input.name,
+      color: input.color,
+      birthday: input.birthday,
+      profileType: existingProfile[0].userId ? "adult" : input.profileType,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(profiles.id, id),
+        eq(profiles.householdId, household.id),
+      ),
+    );
+
+  revalidatePath("/", "layout");
+  redirect("/settings");
 }
 
 export async function setProfilePhoto(profileId: string, url: string) {

@@ -1,8 +1,14 @@
+import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@/db/client";
-import { householdMembers, households } from "@/db/schema";
+import {
+  householdMembers,
+  households,
+  profiles,
+  users,
+} from "@/db/schema";
 import { auth } from "@/lib/auth";
 
 export async function getSession() {
@@ -39,7 +45,42 @@ export async function requireHousehold() {
   await requireUser();
   const household = await getCurrentHousehold();
   if (!household) redirect("/onboarding");
+  await ensureAdultProfiles(household.id);
   return household;
+}
+
+async function ensureAdultProfiles(householdId: string) {
+  const adultMembers = await db
+    .select({
+      userId: householdMembers.userId,
+      name: users.name,
+      profileId: profiles.id,
+    })
+    .from(householdMembers)
+    .innerJoin(users, eq(householdMembers.userId, users.id))
+    .leftJoin(
+      profiles,
+      and(
+        eq(profiles.householdId, householdMembers.householdId),
+        eq(profiles.userId, householdMembers.userId),
+      ),
+    )
+    .where(eq(householdMembers.householdId, householdId));
+  const missingProfiles = adultMembers
+    .filter((member) => !member.profileId)
+    .map((member, index) => ({
+      id: randomUUID(),
+      householdId,
+      userId: member.userId,
+      profileType: "adult" as const,
+      name: member.name,
+      color: "#6689a3",
+      sortOrder: -100 + index,
+    }));
+
+  if (missingProfiles.length > 0) {
+    await db.insert(profiles).values(missingProfiles).onConflictDoNothing();
+  }
 }
 
 export async function assertHouseholdAccess(householdId: string) {
