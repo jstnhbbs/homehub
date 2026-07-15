@@ -9,7 +9,7 @@ import {
   households,
 } from "@/db/schema";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
-import { parseIcalEvent } from "./ical";
+import { parseIcalEvent, makeIcalEvent } from "./ical";
 import { staleCalendarEventIds } from "./reconcile";
 
 const ICLOUD_URL = "https://caldav.icloud.com";
@@ -62,13 +62,19 @@ export async function connectICloud(input: {
       .values({
         id: connectionId,
         householdId: input.householdId,
+        provider: "icloud",
+        accountEmail: input.username,
         appleId: input.username,
         encryptedPassword: encryptSecret(input.appSpecificPassword),
         status: "connected",
       })
       .onConflictDoUpdate({
-        target: calendarConnections.householdId,
+        target: [
+          calendarConnections.householdId,
+          calendarConnections.provider,
+        ],
         set: {
+          accountEmail: input.username,
           appleId: input.username,
           encryptedPassword: encryptSecret(input.appSpecificPassword),
           status: "connected",
@@ -80,7 +86,12 @@ export async function connectICloud(input: {
     const activeConnection = await tx
       .select({ id: calendarConnections.id })
       .from(calendarConnections)
-      .where(eq(calendarConnections.householdId, input.householdId))
+      .where(
+        and(
+          eq(calendarConnections.householdId, input.householdId),
+          eq(calendarConnections.provider, "icloud"),
+        ),
+      )
       .limit(1);
     const id = activeConnection[0]?.id ?? connectionId;
     for (const calendar of discovered) {
@@ -98,18 +109,23 @@ export async function connectICloud(input: {
         });
     }
   });
-  await syncHouseholdCalendars(input.householdId, true);
+  await syncICloudCalendars(input.householdId, true);
   return discovered.length;
 }
 
-export async function syncHouseholdCalendars(
+export async function syncICloudCalendars(
   householdId: string,
   force = false,
 ) {
   const connection = await db
     .select()
     .from(calendarConnections)
-    .where(eq(calendarConnections.householdId, householdId))
+    .where(
+      and(
+        eq(calendarConnections.householdId, householdId),
+        eq(calendarConnections.provider, "icloud"),
+      ),
+    )
     .limit(1);
   const current = connection[0];
   if (!current) return { status: "not-connected" as const };
@@ -152,8 +168,8 @@ export async function syncHouseholdCalendars(
 
   try {
     const client = makeClient(
-      current.appleId,
-      decryptSecret(current.encryptedPassword),
+      current.appleId ?? current.accountEmail,
+      decryptSecret(current.encryptedPassword!),
     );
     await client.login();
     const selected = await db
@@ -285,20 +301,109 @@ export async function syncHouseholdCalendars(
 export async function disconnectICloud(householdId: string) {
   await db
     .delete(calendarConnections)
-    .where(eq(calendarConnections.householdId, householdId));
+    .where(
+      and(
+        eq(calendarConnections.householdId, householdId),
+        eq(calendarConnections.provider, "icloud"),
+      ),
+    );
 }
 
-export async function getCalendarClientForHousehold(householdId: string) {
+async function getICloudClientForHousehold(householdId: string) {
   const result = await db
     .select()
     .from(calendarConnections)
-    .where(eq(calendarConnections.householdId, householdId))
+    .where(
+      and(
+        eq(calendarConnections.householdId, householdId),
+        eq(calendarConnections.provider, "icloud"),
+      ),
+    )
     .limit(1);
-  if (!result[0]) throw new Error("iCloud is not connected.");
+  if (!result[0]?.encryptedPassword) {
+    throw new Error("iCloud is not connected.");
+  }
   const client = makeClient(
-    result[0].appleId,
+    result[0].appleId ?? result[0].accountEmail,
     decryptSecret(result[0].encryptedPassword),
   );
   await client.login();
   return { client, connection: result[0] };
+}
+
+export async function createICloudEvent(input: {
+  householdId: string;
+  calendarUrl: string;
+  calendarDisplayName: string;
+  calendarColor: string;
+  title: string;
+  location?: string;
+  startsAt: Date;
+  endsAt: Date;
+  uid: string;
+}) {
+  const rawIcal = makeIcalEvent({
+    uid: input.uid,
+    title: input.title,
+    location: input.location,
+    startsAt: input.startsAt,
+    endsAt: input.endsAt,
+  });
+  const { client } = await getICloudClientForHousehold(input.householdId);
+  const response = await client.createCalendarObject({
+    calendar: {
+      url: input.calendarUrl,
+      displayName: input.calendarDisplayName,
+      calendarColor: input.calendarColor,
+    } as DAVCalendar,
+    filename: `${input.uid}.ics`,
+    iCalString: rawIcal,
+  });
+  if (!response.ok) throw new Error("iCloud could not create that event.");
+}
+
+export async function updateICloudEvent(input: {
+  householdId: string;
+  eventHref: string;
+  eventEtag: string | null;
+  rawIcal: string;
+  title: string;
+  location?: string;
+  startsAt: Date;
+  endsAt: Date;
+  uid: string;
+}) {
+  const rawIcal = makeIcalEvent({
+    uid: input.uid,
+    title: input.title,
+    location: input.location,
+    startsAt: input.startsAt,
+    endsAt: input.endsAt,
+  });
+  const { client } = await getICloudClientForHousehold(input.householdId);
+  const response = await client.updateCalendarObject({
+    calendarObject: {
+      url: input.eventHref,
+      etag: input.eventEtag ?? undefined,
+      data: rawIcal,
+    },
+  });
+  if (!response.ok) throw new Error("iCloud could not update that event.");
+}
+
+export async function deleteICloudEvent(input: {
+  householdId: string;
+  eventHref: string;
+  eventEtag: string | null;
+  rawIcal: string;
+}) {
+  const { client } = await getICloudClientForHousehold(input.householdId);
+  const response = await client.deleteCalendarObject({
+    calendarObject: {
+      url: input.eventHref,
+      etag: input.eventEtag ?? undefined,
+      data: input.rawIcal,
+    },
+  });
+  if (!response.ok) throw new Error("iCloud could not delete that event.");
 }

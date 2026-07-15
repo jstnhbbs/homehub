@@ -4,7 +4,6 @@ import { randomUUID } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { fromZonedTime } from "date-fns-tz";
 import { revalidatePath } from "next/cache";
-import type { DAVCalendar, DAVCalendarObject } from "tsdav";
 import { z } from "zod";
 import { db } from "@/db/client";
 import {
@@ -13,10 +12,11 @@ import {
   calendars,
 } from "@/db/schema";
 import {
-  getCalendarClientForHousehold,
+  createRemoteCalendarEvent,
+  deleteRemoteCalendarEvent,
   syncHouseholdCalendars,
-} from "@/lib/caldav/client";
-import { makeIcalEvent } from "@/lib/caldav/ical";
+  updateRemoteCalendarEvent,
+} from "@/lib/calendar/sync";
 import { requireHousehold } from "@/lib/household";
 
 const eventInput = z.object({
@@ -42,7 +42,7 @@ export async function createCalendarEvent(formData: FormData) {
       url: calendars.url,
       displayName: calendars.displayName,
       color: calendars.color,
-      connectionId: calendars.connectionId,
+      provider: calendarConnections.provider,
     })
     .from(calendars)
     .innerJoin(
@@ -62,24 +62,18 @@ export async function createCalendarEvent(formData: FormData) {
   if (endsAt <= startsAt) throw new Error("Event end must be after its start.");
 
   const uid = `${randomUUID()}@homehub`;
-  const rawIcal = makeIcalEvent({
-    uid,
+  await createRemoteCalendarEvent({
+    provider: selected[0].provider,
+    householdId: household.id,
+    calendarUrl: selected[0].url,
+    calendarDisplayName: selected[0].displayName,
+    calendarColor: selected[0].color,
     title: input.title,
     location: input.location,
     startsAt,
     endsAt,
+    uid,
   });
-  const { client } = await getCalendarClientForHousehold(household.id);
-  const response = await client.createCalendarObject({
-    calendar: {
-      url: selected[0].url,
-      displayName: selected[0].displayName,
-      calendarColor: selected[0].color,
-    } as DAVCalendar,
-    filename: `${uid}.ics`,
-    iCalString: rawIcal,
-  });
-  if (!response.ok) throw new Error("iCloud could not create that event.");
   await syncHouseholdCalendars(household.id, true);
   revalidatePath("/", "layout");
 }
@@ -101,6 +95,8 @@ export async function updateCalendarEvent(formData: FormData) {
       href: calendarEvents.href,
       etag: calendarEvents.etag,
       rawIcal: calendarEvents.rawIcal,
+      calendarUrl: calendars.url,
+      provider: calendarConnections.provider,
     })
     .from(calendarEvents)
     .innerJoin(calendars, eq(calendarEvents.calendarId, calendars.id))
@@ -116,22 +112,19 @@ export async function updateCalendarEvent(formData: FormData) {
     )
     .limit(1);
   if (!event[0]) throw new Error("Event not found.");
-  const rawIcal = makeIcalEvent({
-    uid: event[0].uid,
+  await updateRemoteCalendarEvent({
+    provider: event[0].provider,
+    householdId: household.id,
+    calendarUrl: event[0].calendarUrl,
+    eventHref: event[0].href,
+    eventEtag: event[0].etag,
+    rawIcal: event[0].rawIcal,
     title: input.title,
     location: input.location,
     startsAt: fromZonedTime(input.startsAt, household.timezone),
     endsAt: fromZonedTime(input.endsAt, household.timezone),
+    uid: event[0].uid,
   });
-  const { client } = await getCalendarClientForHousehold(household.id);
-  const response = await client.updateCalendarObject({
-    calendarObject: {
-      url: event[0].href,
-      etag: event[0].etag ?? undefined,
-      data: rawIcal,
-    } as DAVCalendarObject,
-  });
-  if (!response.ok) throw new Error("iCloud could not update that event.");
   await syncHouseholdCalendars(household.id, true);
   revalidatePath("/", "layout");
 }
@@ -145,6 +138,8 @@ export async function deleteCalendarEvent(formData: FormData) {
       href: calendarEvents.href,
       etag: calendarEvents.etag,
       rawIcal: calendarEvents.rawIcal,
+      calendarUrl: calendars.url,
+      provider: calendarConnections.provider,
     })
     .from(calendarEvents)
     .innerJoin(calendars, eq(calendarEvents.calendarId, calendars.id))
@@ -160,15 +155,14 @@ export async function deleteCalendarEvent(formData: FormData) {
     )
     .limit(1);
   if (!event[0]) throw new Error("Event not found.");
-  const { client } = await getCalendarClientForHousehold(household.id);
-  const response = await client.deleteCalendarObject({
-    calendarObject: {
-      url: event[0].href,
-      etag: event[0].etag ?? undefined,
-      data: event[0].rawIcal,
-    } as DAVCalendarObject,
+  await deleteRemoteCalendarEvent({
+    provider: event[0].provider,
+    householdId: household.id,
+    calendarUrl: event[0].calendarUrl,
+    eventHref: event[0].href,
+    eventEtag: event[0].etag,
+    rawIcal: event[0].rawIcal,
   });
-  if (!response.ok) throw new Error("iCloud could not delete that event.");
   await db.delete(calendarEvents).where(eq(calendarEvents.id, eventId));
   revalidatePath("/", "layout");
 }

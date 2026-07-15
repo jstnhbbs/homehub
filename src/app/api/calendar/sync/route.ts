@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { syncHouseholdCalendars } from "@/lib/caldav/client";
+import { syncHouseholdCalendars } from "@/lib/calendar/sync";
 import { getCurrentHousehold, getSession } from "@/lib/household";
 import { checkRateLimit } from "@/lib/rate-limit";
 

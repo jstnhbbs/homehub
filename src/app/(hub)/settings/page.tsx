@@ -84,10 +84,11 @@ export default async function SettingsPage() {
         <section className="hub-card p-6 max-md:p-4">
           <CalendarDays className="text-[var(--sage)]" size={28} />
           <h2 className="font-display mt-4 text-2xl font-semibold">
-            Apple Calendar
+            Calendars
           </h2>
           <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-            Connect, sync, and choose the iCloud calendars shown around the hub.
+            Connect Apple or Google calendars and choose which ones appear on
+            the hub.
           </p>
           <Link href="/settings/calendar" className="hub-button mt-6">
             Calendar settings
@@ -113,8 +114,8 @@ export default async function SettingsPage() {
             Household privacy
           </h2>
           <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-            Parents manage the hub. Child profiles never need accounts, and Apple
-            credentials stay encrypted on the server.
+            Parents manage the hub. Child profiles never need accounts, and
+            calendar credentials stay encrypted on the server.
           </p>
           <div className="mt-5 flex items-center justify-between gap-3 rounded-2xl border border-[var(--line)] p-4 text-sm">
             <span className="font-bold">Timezone</span>

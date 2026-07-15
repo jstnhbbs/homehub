@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db/client";
 import { calendarConnections, households } from "@/db/schema";
-import { syncHouseholdCalendars } from "@/lib/caldav/client";
+import { syncHouseholdCalendars } from "@/lib/calendar/sync";
 
 export const runtime = "nodejs";
 

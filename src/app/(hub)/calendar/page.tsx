@@ -24,6 +24,7 @@ import {
   Trash2,
 } from "lucide-react";
 import Link from "next/link";
+import { calendarSyncStatus } from "@/lib/calendar/connections";
 import { CalendarSync } from "@/components/calendar-sync";
 import { db } from "@/db/client";
 import {
@@ -82,8 +83,7 @@ export default async function CalendarPage({
       db
         .select()
         .from(calendarConnections)
-        .where(eq(calendarConnections.householdId, household.id))
-        .limit(1),
+        .where(eq(calendarConnections.householdId, household.id)),
       db
         .select({
           id: calendars.id,
@@ -133,7 +133,7 @@ export default async function CalendarPage({
         .where(eq(profiles.householdId, household.id)),
     ]);
 
-  const connection = connections[0];
+  const calendarStatus = calendarSyncStatus(connections);
   const occurrences = [
     ...cachedEvents.flatMap((event) =>
       expandIcalEvent(
@@ -191,8 +191,8 @@ export default async function CalendarPage({
           </h1>
         </div>
         <CalendarSync
-          connected={Boolean(connection)}
-          lastSyncedAt={connection?.lastSyncedAt?.toISOString()}
+          connected={calendarStatus.connected}
+          lastSyncedAt={calendarStatus.lastSyncedAt}
         />
       </div>
 
@@ -506,7 +506,7 @@ export default async function CalendarPage({
             )}
           </div>
 
-          {connection ? (
+          {calendarStatus.connected ? (
             <details className="mt-5 border-t border-[var(--line)] pt-4">
               <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-bold">
                 <CalendarPlus size={17} className="text-[var(--sage)]" />

@@ -1,13 +1,13 @@
 # Home Hub
 
-An iPad-first family dashboard for Apple calendars, routines, chores, and weekly meal planning.
+An iPad-first family dashboard for Apple and Google calendars, routines, chores, and weekly meal planning.
 
 ## Stack
 
 - Next.js App Router, React, TypeScript, and Tailwind CSS
 - Turso/libSQL with Drizzle ORM
 - Better Auth for parent accounts
-- iCloud CalDAV for private, two-way calendar sync
+- Apple iCloud CalDAV and Google Calendar OAuth for private, two-way sync
 - Vercel Blob for child profile photos
 - Vitest and Playwright
 
@@ -20,7 +20,7 @@ An iPad-first family dashboard for Apple calendars, routines, chores, and weekly
    cp .env.example .env.local
    ```
 
-2. Fill the three secrets in `.env.local`. Generate independent values with `openssl rand -base64 32`.
+2. Fill the secrets in `.env.local`. Generate independent values with `openssl rand -base64 32`.
 
 3. Create the local database and run the app:
 
@@ -31,16 +31,27 @@ An iPad-first family dashboard for Apple calendars, routines, chores, and weekly
 
 Open `http://localhost:3000`, create a parent account, then create or join a household.
 
-## Connect Apple Calendar
+## Connect calendars
+
+### Apple Calendar
 
 iCloud does not provide Calendar OAuth. Each household must create an app-specific password:
 
 1. Enable two-factor authentication for the Apple Account.
 2. Visit [account.apple.com](https://account.apple.com), then open **Sign-In and Security → App-Specific Passwords**.
 3. Create a password named “Home Hub.”
-4. In Home Hub, open **Settings → Apple Calendar** and enter the Apple Account email and generated password.
+4. In Home Hub, open **Settings → Calendars** and connect Apple Calendar with the account email and generated password.
 
 The app-specific password is encrypted with AES-256-GCM before it is stored. Never use or paste the primary Apple Account password.
+
+### Google Calendar
+
+1. Create a Google Cloud project and enable the Google Calendar API.
+2. Configure an OAuth client (Web application) with redirect URI `https://your-domain/api/calendar/google/callback` (or `http://localhost:3000/api/calendar/google/callback` locally).
+3. Add `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` to your environment.
+4. In Home Hub, open **Settings → Calendars** and click **Connect Google Calendar**.
+
+Refresh tokens are encrypted with the same `CALENDAR_ENCRYPTION_KEY` used for Apple credentials. A household can connect both Apple and Google at the same time.
 
 ## Turso and Vercel deployment
 

@@ -289,8 +289,17 @@ export const calendarConnections = sqliteTable(
     householdId: text("household_id")
       .notNull()
       .references(() => households.id, { onDelete: "cascade" }),
-    appleId: text("apple_id").notNull(),
-    encryptedPassword: text("encrypted_password").notNull(),
+    provider: text("provider", { enum: ["icloud", "google"] })
+      .notNull()
+      .default("icloud"),
+    accountEmail: text("account_email").notNull(),
+    appleId: text("apple_id"),
+    encryptedPassword: text("encrypted_password"),
+    encryptedRefreshToken: text("encrypted_refresh_token"),
+    encryptedAccessToken: text("encrypted_access_token"),
+    accessTokenExpiresAt: integer("access_token_expires_at", {
+      mode: "timestamp",
+    }),
     status: text("status", {
       enum: ["connected", "syncing", "error"],
     })
@@ -302,7 +311,10 @@ export const calendarConnections = sqliteTable(
     ...timestamps,
   },
   (table) => [
-    uniqueIndex("calendar_connections_household_idx").on(table.householdId),
+    uniqueIndex("calendar_connections_household_provider_idx").on(
+      table.householdId,
+      table.provider,
+    ),
   ],
 );
 

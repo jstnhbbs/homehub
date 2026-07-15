@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { toggleChore, toggleRoutineStep } from "@/app/actions";
+import { calendarSyncStatus } from "@/lib/calendar/connections";
 import { CalendarSync } from "@/components/calendar-sync";
 import { CheckItem } from "@/components/check-item";
 import { ProfileAvatar } from "@/components/profile-avatar";
@@ -122,8 +123,7 @@ export default async function DashboardPage() {
     db
       .select()
       .from(calendarConnections)
-      .where(eq(calendarConnections.householdId, household.id))
-      .limit(1),
+      .where(eq(calendarConnections.householdId, household.id)),
   ]);
 
   const doneSteps = new Set(routineDone.map((item) => item.stepId));
@@ -150,7 +150,7 @@ export default async function DashboardPage() {
     ),
   ].sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
   const birthdayReminders = upcomingBirthdays(familyProfiles, localDate);
-  const currentConnection = connectionRows[0];
+  const calendarStatus = calendarSyncStatus(connectionRows);
   const mealSlots = ["breakfast", "lunch", "dinner", "snack"] as const;
 
   return (
@@ -165,8 +165,8 @@ export default async function DashboardPage() {
           </h1>
         </div>
         <CalendarSync
-          connected={Boolean(currentConnection)}
-          lastSyncedAt={currentConnection?.lastSyncedAt?.toISOString()}
+          connected={calendarStatus.connected}
+          lastSyncedAt={calendarStatus.lastSyncedAt}
         />
       </div>
 
@@ -207,9 +207,9 @@ export default async function DashboardPage() {
             ) : (
               <EmptyState
                 text={
-                  currentConnection
+                  calendarStatus.connected
                     ? "Nothing on the calendar today."
-                    : "Connect Apple Calendar to see today’s events."
+                    : "Connect a calendar to see today’s events."
                 }
                 href="/settings/calendar"
               />

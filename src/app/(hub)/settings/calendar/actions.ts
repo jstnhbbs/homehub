@@ -8,8 +8,9 @@ import { calendarConnections, calendars } from "@/db/schema";
 import {
   connectICloud,
   disconnectICloud,
-  syncHouseholdCalendars,
 } from "@/lib/caldav/client";
+import { disconnectGoogleCalendar } from "@/lib/google/calendar";
+import { syncHouseholdCalendars } from "@/lib/calendar/sync";
 import { requireHousehold } from "@/lib/household";
 import { checkRateLimit } from "@/lib/rate-limit";
 
@@ -37,9 +38,14 @@ export async function connectCalendar(formData: FormData) {
   revalidatePath("/", "layout");
 }
 
-export async function disconnectCalendar() {
+export async function disconnectCalendar(formData: FormData) {
   const household = await requireHousehold();
-  await disconnectICloud(household.id);
+  const provider = z.enum(["icloud", "google"]).parse(formData.get("provider"));
+  if (provider === "google") {
+    await disconnectGoogleCalendar(household.id);
+  } else {
+    await disconnectICloud(household.id);
+  }
   revalidatePath("/", "layout");
 }
 
