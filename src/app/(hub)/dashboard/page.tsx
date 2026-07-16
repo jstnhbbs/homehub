@@ -13,6 +13,7 @@ import { calendarSyncStatus } from "@/lib/calendar/connections";
 import { CalendarSync } from "@/components/calendar-sync";
 import { CheckItem } from "@/components/check-item";
 import { ProfileAvatar } from "@/components/profile-avatar";
+import { TodaySchedule } from "@/components/today-schedule";
 import { db } from "@/db/client";
 import {
   calendarConnections,
@@ -149,6 +150,15 @@ export default async function DashboardPage() {
       household.timezone,
     ),
   ].sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
+  const scheduleEvents = schedule.map((event) => ({
+    eventId: event.eventId,
+    title: event.title,
+    startsAt: event.startsAt.toISOString(),
+    endsAt: event.endsAt.toISOString(),
+    allDay: event.allDay,
+    color: event.color,
+    calendarName: event.calendarName,
+  }));
   const birthdayReminders = upcomingBirthdays(familyProfiles, localDate);
   const calendarStatus = calendarSyncStatus(connectionRows, household.timezone);
   const mealSlots = ["breakfast", "lunch", "dinner", "snack"] as const;
@@ -178,42 +188,12 @@ export default async function DashboardPage() {
             href="/calendar"
           />
           <div className="mt-4 space-y-2">
-            {schedule.length ? (
-              schedule.slice(0, 5).map((event, index) => (
-                <div
-                  key={`${event.eventId}-${event.startsAt.toISOString()}-${index}`}
-                  className="flex min-h-14 items-center gap-3 rounded-2xl bg-white/65 px-3"
-                >
-                  <span
-                    className="h-9 w-1.5 rounded-full"
-                    style={{ background: event.color }}
-                  />
-                  <div className="min-w-0">
-                    <p className="truncate font-bold">{event.title}</p>
-                    <p className="text-xs text-[var(--muted)]">
-                      {event.allDay
-                        ? "All day"
-                        : new Intl.DateTimeFormat("en-US", {
-                            timeZone: household.timezone,
-                            hour: "numeric",
-                            minute: "2-digit",
-                          }).format(event.startsAt)}
-                      {" · "}
-                      {event.calendarName}
-                    </p>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <EmptyState
-                text={
-                  calendarStatus.connected
-                    ? "Nothing on the calendar today."
-                    : "Connect a calendar to see today’s events."
-                }
-                href="/settings/calendar"
-              />
-            )}
+            <TodaySchedule
+              events={scheduleEvents}
+              timezone={household.timezone}
+              connected={calendarStatus.connected}
+              initialNow={new Date().toISOString()}
+            />
           </div>
         </section>
 
