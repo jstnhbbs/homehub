@@ -150,7 +150,7 @@ export default async function DashboardPage() {
     ),
   ].sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
   const birthdayReminders = upcomingBirthdays(familyProfiles, localDate);
-  const calendarStatus = calendarSyncStatus(connectionRows);
+  const calendarStatus = calendarSyncStatus(connectionRows, household.timezone);
   const mealSlots = ["breakfast", "lunch", "dinner", "snack"] as const;
 
   return (
@@ -166,7 +166,7 @@ export default async function DashboardPage() {
         </div>
         <CalendarSync
           connected={calendarStatus.connected}
-          lastSyncedAt={calendarStatus.lastSyncedAt}
+          updatedLabel={calendarStatus.updatedLabel}
         />
       </div>
 

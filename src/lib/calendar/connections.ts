@@ -1,10 +1,18 @@
+import { formatInTimeZone } from "date-fns-tz";
+
 type CalendarConnection = {
   lastSyncedAt: Date | null;
 };
 
-export function calendarSyncStatus(connections: CalendarConnection[]) {
+export function calendarSyncStatus(
+  connections: CalendarConnection[],
+  timezone: string,
+) {
   if (!connections.length) {
-    return { connected: false, lastSyncedAt: undefined as string | undefined };
+    return {
+      connected: false,
+      updatedLabel: undefined as string | undefined,
+    };
   }
   const latest = connections.reduce((current, connection) => {
     if (!connection.lastSyncedAt) return current;
@@ -15,6 +23,8 @@ export function calendarSyncStatus(connections: CalendarConnection[]) {
   }, null as Date | null);
   return {
     connected: true,
-    lastSyncedAt: latest?.toISOString(),
+    updatedLabel: latest
+      ? `Updated ${formatInTimeZone(latest, timezone, "h:mm a")}`
+      : undefined,
   };
 }

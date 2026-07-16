@@ -6,10 +6,10 @@ import { useRouter } from "next/navigation";
 
 export function CalendarSync({
   connected,
-  lastSyncedAt,
+  updatedLabel,
 }: {
   connected: boolean;
-  lastSyncedAt?: string;
+  updatedLabel?: string;
 }) {
   const router = useRouter();
   const [syncing, setSyncing] = useState(false);
@@ -59,11 +59,7 @@ export function CalendarSync({
       className="flex items-center gap-2 rounded-full bg-[var(--sage-soft)] px-3 py-1.5 text-xs font-bold text-[var(--sage)]"
     >
       <RefreshCw size={14} className={syncing ? "animate-spin" : ""} />
-      {syncing
-        ? "Syncing"
-        : lastSyncedAt
-          ? `Updated ${new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(new Date(lastSyncedAt))}`
-          : "Sync now"}
+      {syncing ? "Syncing" : (updatedLabel ?? "Sync now")}
     </button>
   );
 }

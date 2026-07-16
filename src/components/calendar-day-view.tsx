@@ -1,6 +1,6 @@
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
-import { format, parseISO } from "date-fns";
 import Link from "next/link";
+import { formatLocalDate } from "@/lib/dates";
 
 type DayEvent = {
   eventId: string;
@@ -29,7 +29,6 @@ export function CalendarDayView({
   const allDayEvents = events.filter((event) => event.allDay);
   const timedEvents = events.filter((event) => !event.allDay);
   const hours = Array.from({ length: 17 }, (_, index) => index + 6);
-  const selected = parseISO(selectedDate);
   const isToday = selectedDate === today;
 
   return (
@@ -37,10 +36,10 @@ export function CalendarDayView({
       <div className="flex items-center justify-between border-b border-[var(--line)] px-5 py-4">
         <div>
           <p className="text-xs font-extrabold uppercase tracking-wider text-[var(--muted)]">
-            {format(selected, "EEEE")}
+            {formatLocalDate(selectedDate, timezone, "EEEE")}
           </p>
           <h2 className="font-display text-2xl font-semibold">
-            {format(selected, "MMMM d, yyyy")}
+            {formatLocalDate(selectedDate, timezone, "MMMM d, yyyy")}
           </h2>
         </div>
         {isToday && (

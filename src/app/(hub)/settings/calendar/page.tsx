@@ -49,7 +49,7 @@ export default async function CalendarSettingsPage({
         )
         .where(eq(calendarConnections.householdId, household.id))
     : [];
-  const syncStatus = calendarSyncStatus(connections);
+  const syncStatus = calendarSyncStatus(connections, household.timezone);
   const icloud = connections.find((item) => item.provider === "icloud");
   const google = connections.find((item) => item.provider === "google");
   const errorMessage =
@@ -81,7 +81,7 @@ export default async function CalendarSettingsPage({
         </div>
         <CalendarSync
           connected={syncStatus.connected}
-          lastSyncedAt={syncStatus.lastSyncedAt}
+          updatedLabel={syncStatus.updatedLabel}
         />
       </div>
 

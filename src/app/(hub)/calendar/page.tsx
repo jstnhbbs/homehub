@@ -40,7 +40,7 @@ import {
 } from "@/db/schema";
 import { birthdayEventsInRange } from "@/lib/birthdays";
 import { expandIcalEvent } from "@/lib/caldav/ical";
-import { localDateIn } from "@/lib/dates";
+import { localDateIn, formatLocalDate } from "@/lib/dates";
 import { requireHousehold } from "@/lib/household";
 import {
   createCalendarEvent,
@@ -162,7 +162,7 @@ export default async function CalendarPage({
         .where(eq(profiles.householdId, household.id)),
     ]);
 
-  const calendarStatus = calendarSyncStatus(connections);
+  const calendarStatus = calendarSyncStatus(connections, household.timezone);
   const occurrences = [
     ...cachedEvents.flatMap((event) =>
       expandIcalEvent(
@@ -236,7 +236,7 @@ export default async function CalendarPage({
         </div>
         <CalendarSync
           connected={calendarStatus.connected}
-          lastSyncedAt={calendarStatus.lastSyncedAt}
+          updatedLabel={calendarStatus.updatedLabel}
         />
       </div>
 
@@ -448,7 +448,7 @@ export default async function CalendarPage({
                 Agenda
               </p>
               <h2 className="font-display mt-1 text-2xl font-semibold">
-                {format(parseISO(selectedDate), "EEEE, MMMM d")}
+                {formatLocalDate(selectedDate, household.timezone, "EEEE, MMMM d")}
               </h2>
             </div>
             {selectedDate === today && (
