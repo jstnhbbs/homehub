@@ -6,13 +6,14 @@ import {
   copyPreviousMealWeek,
 } from "@/app/actions";
 import { MealInput } from "@/components/meal-input";
+import { SnackOptionsPanel } from "@/components/snack-options-panel";
 import { db } from "@/db/client";
 import { meals, recipes } from "@/db/schema";
 import { weekDates } from "@/lib/dates";
 import { requireHousehold } from "@/lib/household";
 import { canManageHousehold } from "@/lib/household-roles";
 
-const slots = ["breakfast", "lunch", "dinner", "snack"] as const;
+const mealSlots = ["breakfast", "lunch", "dinner"] as const;
 
 export default async function MealsPage() {
   const household = await requireHousehold();
@@ -50,115 +51,125 @@ export default async function MealsPage() {
           </h1>
         </div>
         {canManage && (
-        <div className="flex flex-wrap gap-2">
-          <form action={copyPreviousMealWeek}>
-            <input type="hidden" name="weekStart" value={weekStart} />
-            <button className="hub-button secondary">
-              <Copy size={16} /> Copy last week
-            </button>
-          </form>
-          <form action={clearMealWeek}>
-            <input type="hidden" name="weekStart" value={weekStart} />
-            <button className="hub-button secondary text-[var(--coral)]">
-              <Trash2 size={16} /> Clear week
-            </button>
-          </form>
-        </div>
+          <div className="flex flex-wrap gap-2">
+            <form action={copyPreviousMealWeek}>
+              <input type="hidden" name="weekStart" value={weekStart} />
+              <button className="hub-button secondary">
+                <Copy size={16} /> Copy last week
+              </button>
+            </form>
+            <form action={clearMealWeek}>
+              <input type="hidden" name="weekStart" value={weekStart} />
+              <button className="hub-button secondary text-[var(--coral)]">
+                <Trash2 size={16} /> Clear week
+              </button>
+            </form>
+          </div>
         )}
       </div>
 
-      <div className="mt-4 space-y-3 md:hidden">
-        {days.map((day, dayIndex) => {
-          const localDate = dateStrings[dayIndex];
-          return (
-            <section key={localDate} className="hub-card p-4">
-              <div className="mb-3 flex items-baseline justify-between">
-                <h2 className="font-display text-2xl font-semibold">
-                  {format(day, "EEEE")}
-                </h2>
-                <span className="text-sm font-bold text-[var(--muted)]">
-                  {format(day, "MMM d")}
-                </span>
-              </div>
-              <div className="space-y-3">
-                {slots.map((slot) => {
-                  const meal = weekMeals.find(
-                    (item) =>
-                      item.localDate === localDate && item.slot === slot,
-                  );
-                  return (
-                    <div key={slot}>
-                      <p className="mb-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-[var(--muted)]">
-                        {slot}
-                      </p>
-                      <MealInput
-                        key={`${localDate}-${slot}-${meal?.recipeId ?? ""}-${meal?.title ?? ""}`}
-                        localDate={localDate}
-                        slot={slot}
-                        initialValue={meal?.title ?? ""}
-                        initialRecipeId={meal?.recipeId}
-                        recipes={householdRecipes}
-                        readOnly={!canManage}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          );
-        })}
-      </div>
-
-      <section className="hub-card mt-6 overflow-hidden max-md:hidden">
-        <div className="grid grid-cols-[100px_repeat(7,minmax(120px,1fr))]">
-          <div className="border-b border-r border-[var(--line)] p-3" />
-          {days.map((day) => (
-            <div
-              key={day.toISOString()}
-              className="border-b border-r border-[var(--line)] p-3 text-center last:border-r-0"
-            >
-              <p className="text-xs font-extrabold uppercase tracking-wider text-[var(--muted)]">
-                {format(day, "EEE")}
-              </p>
-              <p className="font-display mt-1 text-2xl font-semibold">
-                {format(day, "d")}
-              </p>
-            </div>
-          ))}
-          {slots.map((slot) => (
-            <div key={slot} className="contents">
-              <div className="flex items-center border-b border-r border-[var(--line)] p-3 text-xs font-extrabold uppercase tracking-wider text-[var(--muted)]">
-                {slot}
-              </div>
-              {dateStrings.map((localDate) => {
-                const meal = weekMeals.find(
-                  (item) =>
-                    item.localDate === localDate && item.slot === slot,
-                );
-                return (
-                  <div
-                    key={`${localDate}-${slot}`}
-                    className="min-h-20 border-b border-r border-[var(--line)] p-2 last:border-r-0"
-                  >
-                    <MealInput
-                      key={`${localDate}-${slot}-${meal?.recipeId ?? ""}-${meal?.title ?? ""}`}
-                      localDate={localDate}
-                      slot={slot}
-                      initialValue={meal?.title ?? ""}
-                      initialRecipeId={meal?.recipeId}
-                      recipes={householdRecipes}
-                      readOnly={!canManage}
-                    />
+      <div className="mt-6 grid grid-cols-[minmax(0,1fr)_320px] items-start gap-5 max-lg:grid-cols-1">
+        <div className="min-w-0 space-y-4">
+          <div className="space-y-3 lg:hidden">
+            {days.map((day, dayIndex) => {
+              const localDate = dateStrings[dayIndex];
+              return (
+                <section key={localDate} className="hub-card p-4">
+                  <div className="mb-3 flex items-baseline justify-between">
+                    <h2 className="font-display text-2xl font-semibold">
+                      {format(day, "EEEE")}
+                    </h2>
+                    <span className="text-sm font-bold text-[var(--muted)]">
+                      {format(day, "MMM d")}
+                    </span>
                   </div>
-                );
-              })}
+                  <div className="space-y-4">
+                    {mealSlots.map((slot) => {
+                      const meal = weekMeals.find(
+                        (item) =>
+                          item.localDate === localDate && item.slot === slot,
+                      );
+                      return (
+                        <div key={slot}>
+                          <p className="mb-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-[var(--muted)]">
+                            {slot}
+                          </p>
+                          <MealInput
+                            key={`${localDate}-${slot}-${meal?.recipeId ?? ""}-${meal?.title ?? ""}`}
+                            localDate={localDate}
+                            slot={slot}
+                            initialValue={meal?.title ?? ""}
+                            initialRecipeId={meal?.recipeId}
+                            recipes={householdRecipes}
+                            readOnly={!canManage}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+
+          <section className="hub-card overflow-hidden max-lg:hidden">
+            <div className="grid grid-cols-[100px_repeat(7,minmax(120px,1fr))]">
+              <div className="border-b border-r border-[var(--line)] p-3" />
+              {days.map((day) => (
+                <div
+                  key={day.toISOString()}
+                  className="border-b border-r border-[var(--line)] p-3 text-center last:border-r-0"
+                >
+                  <p className="text-xs font-extrabold uppercase tracking-wider text-[var(--muted)]">
+                    {format(day, "EEE")}
+                  </p>
+                  <p className="font-display mt-1 text-2xl font-semibold">
+                    {format(day, "d")}
+                  </p>
+                </div>
+              ))}
+              {mealSlots.map((slot) => (
+                <div key={slot} className="contents">
+                  <div className="flex items-start border-b border-r border-[var(--line)] p-3 pt-5 text-xs font-extrabold uppercase tracking-wider text-[var(--muted)]">
+                    {slot}
+                  </div>
+                  {dateStrings.map((localDate) => {
+                    const meal = weekMeals.find(
+                      (item) =>
+                        item.localDate === localDate && item.slot === slot,
+                    );
+                    return (
+                      <div
+                        key={`${localDate}-${slot}`}
+                        className="min-h-36 border-b border-r border-[var(--line)] p-2 last:border-r-0"
+                      >
+                        <MealInput
+                          key={`${localDate}-${slot}-${meal?.recipeId ?? ""}-${meal?.title ?? ""}`}
+                          localDate={localDate}
+                          slot={slot}
+                          initialValue={meal?.title ?? ""}
+                          initialRecipeId={meal?.recipeId}
+                          recipes={householdRecipes}
+                          readOnly={!canManage}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
             </div>
-          ))}
+          </section>
+
+          <p className="text-center text-sm text-[var(--muted)] max-lg:hidden">
+            Pick a saved recipe or type a meal name. Leave it blank to clear that slot.
+          </p>
         </div>
-      </section>
-      <p className="mt-4 text-center text-sm text-[var(--muted)]">
-        Pick a saved recipe or type a meal name. Leave it blank to clear that slot.
-      </p>
+
+        <SnackOptionsPanel
+          snackOptions={household.snackOptions}
+          readOnly={!canManage}
+        />
+      </div>
     </div>
   );
 }

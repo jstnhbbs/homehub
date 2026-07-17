@@ -33,6 +33,7 @@ import {
 } from "@/lib/birthdays";
 import { expandIcalEvent } from "@/lib/caldav/ical";
 import { localDateIn, weekKey } from "@/lib/dates";
+import { parseSnackOptions } from "@/lib/meals/snacks";
 import { requireHousehold } from "@/lib/household";
 import { canManageHousehold } from "@/lib/household-roles";
 
@@ -163,7 +164,8 @@ export default async function DashboardPage() {
   const birthdayReminders = upcomingBirthdays(familyProfiles, localDate);
   const calendarStatus = calendarSyncStatus(connectionRows, household.timezone);
   const canManage = canManageHousehold(household.role);
-  const mealSlots = ["breakfast", "lunch", "dinner", "snack"] as const;
+  const mealSlots = ["breakfast", "lunch", "dinner"] as const;
+  const snackItems = parseSnackOptions(household.snackOptions);
 
   return (
     <div className="mx-auto max-w-[1500px]">
@@ -261,6 +263,29 @@ export default async function DashboardPage() {
                 </div>
               );
             })}
+            <div>
+              <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-[var(--muted)]">
+                Snacks
+              </p>
+              {snackItems.length ? (
+                <ul className="mt-1 space-y-1">
+                  {snackItems.slice(0, 4).map((item) => (
+                    <li key={item} className="truncate text-sm font-bold">
+                      {item}
+                    </li>
+                  ))}
+                  {snackItems.length > 4 && (
+                    <li className="text-xs font-bold text-[var(--muted)]">
+                      +{snackItems.length - 4} more
+                    </li>
+                  )}
+                </ul>
+              ) : (
+                <p className="mt-0.5 text-sm font-bold text-[var(--muted)]">
+                  None listed
+                </p>
+              )}
+            </div>
           </div>
         </section>
 

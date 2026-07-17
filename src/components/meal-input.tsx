@@ -10,6 +10,8 @@ type RecipeOption = {
   title: string;
 };
 
+type MealSlot = "breakfast" | "lunch" | "dinner";
+
 export function MealInput({
   localDate,
   slot,
@@ -19,7 +21,7 @@ export function MealInput({
   readOnly = false,
 }: {
   localDate: string;
-  slot: "breakfast" | "lunch" | "dinner" | "snack";
+  slot: MealSlot;
   initialValue: string;
   initialRecipeId?: string | null;
   recipes: RecipeOption[];
@@ -28,12 +30,12 @@ export function MealInput({
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(initialValue);
   const [recipeId, setRecipeId] = useState(initialRecipeId ?? "");
-  const titleRef = useRef<HTMLInputElement>(null);
+  const titleRef = useRef<HTMLTextAreaElement>(null);
 
   if (readOnly) {
     return (
-      <div className="space-y-2">
-        <p className="min-h-12 rounded-xl bg-white/60 px-3 py-3 text-sm font-semibold">
+      <div className="flex h-full flex-col space-y-2">
+        <p className="min-h-24 flex-1 whitespace-pre-wrap rounded-xl bg-white/60 px-3 py-3 text-sm font-semibold leading-6">
           {initialValue || "Not planned"}
         </p>
         {initialRecipeId && initialValue && (
@@ -54,7 +56,7 @@ export function MealInput({
         await saveMeal(formData);
         setEditing(false);
       }}
-      className="group relative space-y-2"
+      className="group flex h-full flex-col space-y-2"
     >
       <input type="hidden" name="localDate" value={localDate} />
       <input type="hidden" name="slot" value={slot} />
@@ -83,11 +85,12 @@ export function MealInput({
           ))}
         </select>
       )}
-      <div className="relative">
-        <input
+      <div className="relative min-h-0 flex-1">
+        <textarea
           ref={titleRef}
           name="title"
           value={title}
+          rows={4}
           onChange={(event) => {
             setTitle(event.target.value);
             setRecipeId("");
@@ -96,7 +99,7 @@ export function MealInput({
           placeholder="Add meal"
           aria-label={`${slot} for ${localDate}`}
           onFocus={() => setEditing(true)}
-          className="min-h-12 w-full rounded-xl border border-transparent bg-white/60 px-3 pr-10 text-sm font-semibold outline-none transition focus:border-[var(--sage)] focus:bg-white"
+          className="min-h-24 w-full resize-none rounded-xl border border-transparent bg-white/60 px-3 py-2.5 pr-10 text-sm font-semibold leading-6 outline-none transition focus:border-[var(--sage)] focus:bg-white"
         />
         <button
           type="submit"

@@ -34,6 +34,7 @@ export async function getCurrentHousehold() {
       calendarSyncIntervalMinutes: households.calendarSyncIntervalMinutes,
       inviteCode: households.inviteCode,
       guestInviteCode: households.guestInviteCode,
+      snackOptions: households.snackOptions,
       role: householdMembers.role,
     })
     .from(householdMembers)

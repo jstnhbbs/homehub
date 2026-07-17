@@ -608,6 +608,19 @@ export async function saveMeal(formData: FormData) {
   revalidatePath("/", "layout");
 }
 
+export async function saveSnackOptions(formData: FormData) {
+  const household = await requireParentHousehold();
+  const snackOptions = z
+    .string()
+    .max(2000)
+    .parse(text(formData, "snackOptions"));
+  await db
+    .update(households)
+    .set({ snackOptions, updatedAt: new Date() })
+    .where(eq(households.id, household.id));
+  revalidatePath("/", "layout");
+}
+
 export async function clearMealWeek(formData: FormData) {
   const household = await requireParentHousehold();
   const start = parseISO(z.string().date().parse(text(formData, "weekStart")));
@@ -642,6 +655,7 @@ export async function copyPreviousMealWeek(formData: FormData) {
     ]),
   );
   for (const meal of priorMeals) {
+    if (meal.slot === "snack") continue;
     const targetDate = sourceDates.get(meal.localDate);
     if (!targetDate) continue;
     await db

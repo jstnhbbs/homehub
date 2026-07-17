@@ -92,6 +92,7 @@ export const households = sqliteTable("households", {
     .default(15),
   inviteCode: text("invite_code").notNull().unique(),
   guestInviteCode: text("guest_invite_code").notNull().unique(),
+  snackOptions: text("snack_options").notNull().default(""),
   ...timestamps,
 });
 
