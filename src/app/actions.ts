@@ -19,6 +19,7 @@ import {
   routines,
   routineSteps,
 } from "@/db/schema";
+import { choreDaysForCadence } from "@/lib/chores";
 import { localDateIn } from "@/lib/dates";
 import { isGuest } from "@/lib/household-roles";
 import {
@@ -426,21 +427,26 @@ export async function toggleRoutineStep(
 
 export async function addChore(formData: FormData) {
   const household = await requireParentHousehold();
-  const input = z
+  const parsed = z
     .object({
       title: shortText,
       profileId: z.string().uuid().optional(),
       cadence: z.enum(["daily", "weekly"]),
+      weekDay: z.enum(["0", "1", "2", "3", "4", "5", "6"]).optional(),
     })
     .parse({
       title: text(formData, "title"),
       profileId: text(formData, "profileId") || undefined,
       cadence: text(formData, "cadence") || "daily",
+      weekDay: text(formData, "weekDay") || undefined,
     });
   await db.insert(chores).values({
     id: randomUUID(),
     householdId: household.id,
-    ...input,
+    title: parsed.title,
+    profileId: parsed.profileId ?? null,
+    cadence: parsed.cadence,
+    days: choreDaysForCadence(parsed.cadence, parsed.weekDay),
   });
   revalidatePath("/", "layout");
 }
@@ -448,16 +454,18 @@ export async function addChore(formData: FormData) {
 export async function updateChore(choreId: string, formData: FormData) {
   const household = await requireParentHousehold();
   const id = z.string().uuid().parse(choreId);
-  const input = z
+  const parsed = z
     .object({
       title: shortText,
       profileId: z.string().uuid().optional(),
       cadence: z.enum(["daily", "weekly"]),
+      weekDay: z.enum(["0", "1", "2", "3", "4", "5", "6"]).optional(),
     })
     .parse({
       title: text(formData, "title"),
       profileId: text(formData, "profileId") || undefined,
       cadence: text(formData, "cadence"),
+      weekDay: text(formData, "weekDay") || undefined,
     });
   const chore = await db
     .select({ id: chores.id })
@@ -470,13 +478,13 @@ export async function updateChore(choreId: string, formData: FormData) {
     )
     .limit(1);
   if (!chore[0]) throw new Error("Chore not found.");
-  if (input.profileId) {
+  if (parsed.profileId) {
     const profile = await db
       .select({ id: profiles.id })
       .from(profiles)
       .where(
         and(
-          eq(profiles.id, input.profileId),
+          eq(profiles.id, parsed.profileId),
           eq(profiles.householdId, household.id),
         ),
       )
@@ -487,9 +495,10 @@ export async function updateChore(choreId: string, formData: FormData) {
   await db
     .update(chores)
     .set({
-      title: input.title,
-      profileId: input.profileId ?? null,
-      cadence: input.cadence,
+      title: parsed.title,
+      profileId: parsed.profileId ?? null,
+      cadence: parsed.cadence,
+      days: choreDaysForCadence(parsed.cadence, parsed.weekDay),
       updatedAt: new Date(),
     })
     .where(eq(chores.id, id));

@@ -33,6 +33,7 @@ import {
 } from "@/lib/birthdays";
 import { expandIcalEvent } from "@/lib/caldav/ical";
 import { localDateIn, weekKey } from "@/lib/dates";
+import { isChoreDueOnDate } from "@/lib/chores";
 import { parseSnackOptions } from "@/lib/meals/snacks";
 import { requireHousehold } from "@/lib/household";
 import { canManageHousehold } from "@/lib/household-roles";
@@ -131,6 +132,14 @@ export default async function DashboardPage() {
 
   const doneSteps = new Set(routineDone.map((item) => item.stepId));
   const profileMap = new Map(familyProfiles.map((profile) => [profile.id, profile]));
+  const dueChores = choreRows.filter((chore) =>
+    isChoreDueOnDate(
+      chore.cadence,
+      chore.days,
+      localDate,
+      household.timezone,
+    ),
+  );
   const schedule = [
     ...eventRows.flatMap((event) =>
       expandIcalEvent(
@@ -292,8 +301,8 @@ export default async function DashboardPage() {
         <section className="hub-card col-span-7 min-h-[245px] p-5 max-md:col-span-12 max-md:min-h-0 max-md:p-4">
           <CardTitle icon={CheckSquare2} title="Chores" href="/chores" />
           <div className="mt-4 grid grid-cols-2 gap-2 max-sm:grid-cols-1">
-            {choreRows.length ? (
-              choreRows.slice(0, 4).map((chore) => {
+            {dueChores.length ? (
+              dueChores.slice(0, 4).map((chore) => {
                 const profile = chore.profileId
                   ? profileMap.get(chore.profileId)
                   : undefined;

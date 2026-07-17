@@ -7,10 +7,12 @@ import {
   updateChore,
 } from "@/app/actions";
 import { CheckItem } from "@/components/check-item";
+import { ChoreCadenceFields } from "@/components/chore-cadence-fields";
 import { ProfileAvatar } from "@/components/profile-avatar";
 import { db } from "@/db/client";
 import { choreCompletions, chores, profiles } from "@/db/schema";
 import { localDateIn, weekKey } from "@/lib/dates";
+import { choreCadenceDetail, isChoreDueOnDate } from "@/lib/chores";
 import { requireHousehold } from "@/lib/household";
 import { canManageHousehold } from "@/lib/household-roles";
 
@@ -99,12 +101,19 @@ export default async function ChoresPage() {
                         chore.cadence === "weekly"
                           ? weekKey(new Date())
                           : localDate;
+                      const dueToday = isChoreDueOnDate(
+                        chore.cadence,
+                        chore.days,
+                        localDate,
+                        household.timezone,
+                      );
                       return (
                         <div key={chore.id}>
                           <CheckItem
                             label={chore.title}
-                            detail={chore.cadence}
+                            detail={choreCadenceDetail(chore.cadence, chore.days)}
                             color={group.color}
+                            disabled={!dueToday}
                             initialChecked={completions.some(
                               (item) =>
                                 item.choreId === chore.id &&
@@ -145,15 +154,10 @@ export default async function ChoresPage() {
                                   </option>
                                 ))}
                               </select>
-                              <select
-                                name="cadence"
-                                className="hub-input"
-                                defaultValue={chore.cadence}
-                                aria-label="Chore frequency"
-                              >
-                                <option value="daily">Every day</option>
-                                <option value="weekly">Once a week</option>
-                              </select>
+                              <ChoreCadenceFields
+                                defaultCadence={chore.cadence}
+                                defaultDays={chore.days}
+                              />
                               <button className="hub-button w-full">
                                 Save chore
                               </button>
@@ -201,10 +205,7 @@ export default async function ChoresPage() {
                 </option>
               ))}
             </select>
-            <select name="cadence" className="hub-input" defaultValue="daily">
-              <option value="daily">Every day</option>
-              <option value="weekly">Once a week</option>
-            </select>
+            <ChoreCadenceFields />
             <button className="hub-button w-full">Add chore</button>
           </form>
         </aside>

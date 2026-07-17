@@ -10,21 +10,24 @@ export function CheckItem({
   color = "#4f7c6d",
   onToggle,
   detail,
+  disabled = false,
 }: {
   label: string;
   initialChecked: boolean;
   color?: string;
   detail?: string;
+  disabled?: boolean;
   onToggle: (checked: boolean) => Promise<void>;
 }) {
   const [checked, setChecked] = useState(initialChecked);
   const [pending, startTransition] = useTransition();
+  const inactive = disabled || pending;
 
   return (
     <button
       type="button"
       aria-pressed={checked}
-      disabled={pending}
+      disabled={inactive}
       onClick={() => {
         const next = !checked;
         setChecked(next);
@@ -39,7 +42,8 @@ export function CheckItem({
       className={cn(
         "flex min-h-14 w-full items-center gap-3 rounded-2xl px-3 text-left transition",
         checked ? "bg-black/[0.025] text-[var(--muted)]" : "bg-white/65",
-        pending && "opacity-70",
+        inactive && "opacity-70",
+        disabled && "cursor-not-allowed",
       )}
     >
       <span
