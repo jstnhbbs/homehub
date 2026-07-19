@@ -388,6 +388,22 @@ export async function updateRoutine(routineId: string, formData: FormData) {
   revalidatePath("/", "layout");
 }
 
+export async function deleteRoutine(routineId: string) {
+  const household = await requireParentHousehold();
+  const id = z.string().uuid().parse(routineId);
+  const deleted = await db
+    .delete(routines)
+    .where(
+      and(
+        eq(routines.id, id),
+        eq(routines.householdId, household.id),
+      ),
+    )
+    .returning({ id: routines.id });
+  if (!deleted[0]) throw new Error("Routine not found.");
+  revalidatePath("/", "layout");
+}
+
 export async function toggleRoutineStep(
   stepId: string,
   localDate: string,

@@ -11,7 +11,7 @@ export function SnackOptionsPanel({
   const items = parseSnackOptions(snackOptions);
 
   return (
-    <section className="hub-card flex h-full flex-col p-5 max-md:p-4">
+    <section className="hub-card p-5 max-md:p-4">
       <div>
         <p className="text-xs font-extrabold uppercase tracking-[0.14em] text-[var(--muted)]">
           This week
@@ -40,14 +40,14 @@ export function SnackOptionsPanel({
           )}
         </ul>
       ) : (
-        <form action={saveSnackOptions} className="mt-5 flex min-h-0 flex-1 flex-col">
-          <label className="flex min-h-0 flex-1 flex-col">
+        <form action={saveSnackOptions} className="mt-5">
+          <label className="block">
             <span className="sr-only">Snack options</span>
             <textarea
               name="snackOptions"
               defaultValue={snackOptions}
               placeholder={"Apples\nYogurt tubes\nCheese sticks\nGranola bars"}
-              className="hub-input min-h-56 flex-1 resize-none leading-6 max-md:min-h-44"
+              className="hub-input min-h-36 w-full resize-none leading-6"
               aria-label="Snack options"
             />
           </label>

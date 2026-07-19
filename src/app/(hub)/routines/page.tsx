@@ -1,7 +1,8 @@
 import { and, asc, eq } from "drizzle-orm";
-import { Moon, Pencil, Plus, Sun, Sunset } from "lucide-react";
+import { Moon, Pencil, Plus, Sun, Sunset, Trash2 } from "lucide-react";
 import {
   addRoutine,
+  deleteRoutine,
   toggleRoutineStep,
   updateRoutine,
 } from "@/app/actions";
@@ -176,6 +177,13 @@ export default async function RoutinesPage() {
                     />
                     <button className="hub-button w-full">
                       Save routine
+                    </button>
+                    <button
+                      formAction={deleteRoutine.bind(null, routine.routineId)}
+                      formNoValidate
+                      className="flex w-full items-center justify-center gap-1 rounded-xl px-3 py-2 text-sm font-bold text-[var(--coral)]"
+                    >
+                      <Trash2 size={14} /> Delete routine
                     </button>
                   </form>
                 </details>

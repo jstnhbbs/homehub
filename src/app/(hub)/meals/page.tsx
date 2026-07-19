@@ -68,7 +68,7 @@ export default async function MealsPage() {
         )}
       </div>
 
-      <div className="mt-6 grid grid-cols-[minmax(0,1fr)_320px] items-start gap-5 max-lg:grid-cols-1">
+      <div className="mt-6 space-y-6">
         <div className="min-w-0 space-y-4">
           <div className="space-y-3 lg:hidden">
             {days.map((day, dayIndex) => {
