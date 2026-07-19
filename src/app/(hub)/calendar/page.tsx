@@ -41,6 +41,7 @@ import {
 import { birthdayEventsInRange } from "@/lib/birthdays";
 import { expandIcalEvent } from "@/lib/caldav/ical";
 import { localDateIn, formatLocalDate } from "@/lib/dates";
+import { weekdayLabels, parseWeekStartsOn } from "@/lib/calendar/week-start";
 import { requireHousehold } from "@/lib/household";
 import { canManageHousehold } from "@/lib/household-roles";
 import {
@@ -86,18 +87,19 @@ export default async function CalendarPage({
       : validDate(params.selected) ?? anchorDate;
   const query = params.q?.trim() ?? "";
   const editEventId = params.edit?.trim() ?? "";
+  const weekStartsOn = parseWeekStartsOn(household.weekStartsOn);
 
   const firstDay =
     view === "month"
-      ? startOfWeek(startOfMonth(anchor), { weekStartsOn: 1 })
+      ? startOfWeek(startOfMonth(anchor), { weekStartsOn })
       : view === "week"
-        ? startOfWeek(anchor, { weekStartsOn: 1 })
+        ? startOfWeek(anchor, { weekStartsOn })
         : anchor;
   const lastDay =
     view === "month"
-      ? endOfWeek(endOfMonth(anchor), { weekStartsOn: 1 })
+      ? endOfWeek(endOfMonth(anchor), { weekStartsOn })
       : view === "week"
-        ? endOfWeek(anchor, { weekStartsOn: 1 })
+        ? endOfWeek(anchor, { weekStartsOn })
         : anchor;
   const days = eachDayOfInterval({ start: firstDay, end: lastDay });
   const firstDate = format(firstDay, "yyyy-MM-dd");
@@ -357,16 +359,14 @@ export default async function CalendarPage({
           <div className="overflow-x-auto">
             <div className="min-w-[700px]">
               <div className="grid grid-cols-7 border-b border-[var(--line)]">
-                {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(
-                  (day) => (
-                    <div
-                      key={day}
-                      className="border-r border-[var(--line)] px-3 py-2 text-center text-xs font-extrabold uppercase tracking-wider text-[var(--muted)] last:border-r-0"
-                    >
-                      {day}
-                    </div>
-                  ),
-                )}
+                {weekdayLabels(weekStartsOn).map((day) => (
+                  <div
+                    key={day}
+                    className="border-r border-[var(--line)] px-3 py-2 text-center text-xs font-extrabold uppercase tracking-wider text-[var(--muted)] last:border-r-0"
+                  >
+                    {day}
+                  </div>
+                ))}
               </div>
               <div className="grid grid-cols-7">
                 {days.map((day, index) => {

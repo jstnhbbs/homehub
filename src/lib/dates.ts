@@ -1,5 +1,6 @@
-import { addDays, format, getISOWeek, startOfWeek } from "date-fns";
+import { addDays, format, getISOWeek, startOfWeek, type Day } from "date-fns";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
+import { DEFAULT_WEEK_STARTS_ON } from "@/lib/calendar/week-start";
 
 export function localDateIn(timezone: string, date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -10,8 +11,11 @@ export function localDateIn(timezone: string, date = new Date()) {
   }).format(date);
 }
 
-export function weekDates(from = new Date()) {
-  const start = startOfWeek(from, { weekStartsOn: 1 });
+export function weekDates(
+  from = new Date(),
+  weekStartsOn: Day = DEFAULT_WEEK_STARTS_ON,
+) {
+  const start = startOfWeek(from, { weekStartsOn });
   return Array.from({ length: 7 }, (_, index) => addDays(start, index));
 }
 

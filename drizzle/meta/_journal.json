@@ -85,6 +85,13 @@
       "when": 1784170000000,
       "tag": "0011_snack_completions",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1784180000000,
+      "tag": "0012_week_starts_on",
+      "breakpoints": true
     }
   ]
 }

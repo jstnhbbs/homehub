@@ -16,10 +16,12 @@ import {
   disconnectCalendar,
   updateCalendarSelection,
   updateCalendarSyncInterval,
+  updateWeekStartsOn,
 } from "./actions";
 import {
   CALENDAR_SYNC_INTERVAL_OPTIONS,
 } from "@/lib/calendar/sync-interval";
+import { WEEK_START_OPTIONS } from "@/lib/calendar/week-start";
 
 function providerLabel(provider: "icloud" | "google") {
   return provider === "google" ? "Google Calendar" : "Apple Calendar";
@@ -101,6 +103,31 @@ export default async function CalendarSettingsPage({
           {successMessage}
         </p>
       )}
+
+      <section className="hub-card mt-7 p-6">
+        <h2 className="font-display text-2xl font-semibold">Calendar display</h2>
+        <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
+          Choose which day starts the week on the calendar and meal plan.
+        </p>
+        <form action={updateWeekStartsOn} className="mt-5 flex flex-wrap items-end gap-3">
+          <label className="block min-w-56 flex-1">
+            <span className="mb-1.5 block text-sm font-bold">Start week on</span>
+            <select
+              name="weekStartsOn"
+              defaultValue={household.weekStartsOn}
+              className="hub-input"
+              aria-label="Starting day of the week"
+            >
+              {WEEK_START_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button className="hub-button">Save week start</button>
+        </form>
+      </section>
 
       <section className="hub-card mt-7 p-6">
         <h2 className="font-display text-2xl font-semibold">Auto-sync</h2>

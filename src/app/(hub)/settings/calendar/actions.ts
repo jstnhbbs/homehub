@@ -12,6 +12,7 @@ import {
 import { disconnectGoogleCalendar } from "@/lib/google/calendar";
 import { syncHouseholdCalendars } from "@/lib/calendar/sync";
 import { parseCalendarSyncIntervalMinutes } from "@/lib/calendar/sync-interval";
+import { parseWeekStartsOn } from "@/lib/calendar/week-start";
 import { requireParentHousehold } from "@/lib/household";
 import { checkRateLimit } from "@/lib/rate-limit";
 
@@ -83,6 +84,16 @@ export async function updateCalendarSyncInterval(formData: FormData) {
   await db
     .update(households)
     .set({ calendarSyncIntervalMinutes: intervalMinutes })
+    .where(eq(households.id, household.id));
+  revalidatePath("/", "layout");
+}
+
+export async function updateWeekStartsOn(formData: FormData) {
+  const household = await requireParentHousehold();
+  const weekStartsOn = parseWeekStartsOn(formData.get("weekStartsOn"));
+  await db
+    .update(households)
+    .set({ weekStartsOn })
     .where(eq(households.id, household.id));
   revalidatePath("/", "layout");
 }

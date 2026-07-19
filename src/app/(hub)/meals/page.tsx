@@ -9,6 +9,7 @@ import { MealInput } from "@/components/meal-input";
 import { db } from "@/db/client";
 import { meals, recipes } from "@/db/schema";
 import { weekDates } from "@/lib/dates";
+import { parseWeekStartsOn } from "@/lib/calendar/week-start";
 import { requireHousehold } from "@/lib/household";
 import { canManageHousehold } from "@/lib/household-roles";
 
@@ -16,7 +17,7 @@ const mealSlots = ["breakfast", "lunch", "dinner"] as const;
 
 export default async function MealsPage() {
   const household = await requireHousehold();
-  const days = weekDates();
+  const days = weekDates(new Date(), parseWeekStartsOn(household.weekStartsOn));
   const dateStrings = days.map((day) => format(day, "yyyy-MM-dd"));
   const [weekMeals, householdRecipes] = await Promise.all([
     db
