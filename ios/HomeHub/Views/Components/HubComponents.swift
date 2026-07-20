@@ -116,7 +116,8 @@ struct CheckItemView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(label)
                             .font(.body.weight(.semibold))
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(isChecked ? HubTheme.muted : .primary)
+                            .strikethrough(isChecked, color: HubTheme.muted)
                         if let detail {
                             Text(detail)
                                 .font(.caption.weight(.bold))
@@ -130,7 +131,7 @@ struct CheckItemView: View {
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
-                .background(HubTheme.tileQuiet)
+                .background(isChecked ? HubTheme.tileQuiet : HubTheme.tile)
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             }
             .buttonStyle(.plain)

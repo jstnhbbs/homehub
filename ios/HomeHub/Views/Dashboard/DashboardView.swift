@@ -2,25 +2,105 @@ import SwiftUI
 
 struct DashboardView: View {
     @EnvironmentObject private var appState: AppState
-    @State private var isRefreshing = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+        GeometryReader { proxy in
+            let rowHeight = max(220, (proxy.size.height - 88) / 2)
+
+            VStack(alignment: .leading, spacing: 16) {
                 header
+
                 if let dashboard = appState.dashboard {
-                    scheduleSection(dashboard)
-                    routinesSection(dashboard)
-                    choresSection(dashboard)
-                    mealsSection(dashboard)
-                    snacksSection(dashboard)
+                    HStack(alignment: .top, spacing: 16) {
+                        DashboardPanel(
+                            systemImage: "calendar",
+                            title: "Today's Schedule",
+                            destination: .calendar,
+                            height: rowHeight
+                        ) {
+                            TodaySchedulePanel(
+                                events: dashboard.scheduleEvents,
+                                timezone: TimeZone(identifier: dashboard.household.timezone) ?? .current,
+                                connected: dashboard.calendarStatus.connected
+                            ) {
+                                appState.selectedDestination = .settings
+                            }
+                        }
+
+                        DashboardPanel(
+                            systemImage: "checklist",
+                            title: "Today's Routines",
+                            destination: .routines,
+                            height: rowHeight
+                        ) {
+                            DashboardChecklistPanel(
+                                isEmpty: dashboard.routineSteps.filter { !$0.completed }.isEmpty,
+                                emptyTitle: dashboard.routineSteps.isEmpty
+                                    ? "Add a morning or bedtime routine."
+                                    : "All routines done for today!",
+                                emptyAction: { appState.selectedDestination = .routines }
+                            ) {
+                                ForEach(dashboard.routineSteps.filter { !$0.completed }.prefix(5)) { step in
+                                    RoutineCheckRow(step: step, localDate: dashboard.localDate)
+                                }
+                            }
+                        }
+
+                        DashboardPanel(
+                            systemImage: "checkmark.square.fill",
+                            title: "Chores",
+                            destination: .chores,
+                            height: rowHeight
+                        ) {
+                            let pending = dashboard.chores.filter { !$0.completed }
+                            DashboardChecklistPanel(
+                                isEmpty: pending.isEmpty,
+                                emptyTitle: dashboard.chores.isEmpty
+                                    ? "Add the first family chore."
+                                    : "All chores done!",
+                                emptyAction: { appState.selectedDestination = .chores }
+                            ) {
+                                ForEach(pending.prefix(5)) { chore in
+                                    ChoreCheckRow(chore: chore)
+                                }
+                            }
+                        }
+                    }
+
+                    HStack(alignment: .top, spacing: 16) {
+                        DashboardPanel(
+                            systemImage: "fork.knife",
+                            title: "Today's Meals",
+                            destination: .meals,
+                            height: rowHeight,
+                            background: HubTheme.sunSoft.opacity(0.5)
+                        ) {
+                            VStack(spacing: 8) {
+                                ForEach([MealSlot.breakfast, .lunch, .dinner], id: \.self) { slot in
+                                    MealSlotRow(
+                                        slot: slot,
+                                        meal: dashboard.meals.first { $0.slot == slot }
+                                    )
+                                }
+                            }
+                        }
+
+                        DashboardPanel(
+                            systemImage: "carrot.fill",
+                            title: "Snacks",
+                            destination: .snacks,
+                            height: rowHeight
+                        ) {
+                            SnacksDashboardPanel(dashboard: dashboard)
+                        }
+                    }
                 } else {
                     ProgressView("Loading today…")
-                        .frame(maxWidth: .infinity, minHeight: 240)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            .frame(maxWidth: 1500)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: 1500, maxHeight: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .refreshable {
             await appState.refreshDashboard()
@@ -40,7 +120,7 @@ struct DashboardView: View {
                     .textCase(.uppercase)
                     .foregroundStyle(HubTheme.sage)
                 Text("Here's what's happening today.")
-                    .font(.system(size: 34, weight: .semibold, design: .rounded))
+                    .font(.system(size: 32, weight: .semibold, design: .rounded))
             }
             Spacer()
             if appState.canManageHousehold, let status = appState.dashboard?.calendarStatus {
@@ -64,160 +144,259 @@ struct DashboardView: View {
             }
         }
     }
+}
 
-    private func scheduleSection(_ dashboard: DashboardData) -> some View {
-        HubCard {
-            VStack(alignment: .leading, spacing: 12) {
-                CardTitleView(systemImage: "calendar", title: "Today's Schedule") {
-                    appState.selectedDestination = .calendar
+// MARK: - Layout primitives
+
+private struct DashboardPanel<Content: View>: View {
+    @EnvironmentObject private var appState: AppState
+
+    let systemImage: String
+    let title: String
+    let destination: HubDestination
+    let height: CGFloat
+    var background: Color = HubTheme.tile
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            CardTitleView(systemImage: systemImage, title: title) {
+                appState.selectedDestination = destination
+            }
+            content()
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: height, maxHeight: height, alignment: .topLeading)
+        .background(background)
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(HubTheme.line, lineWidth: 1)
+        )
+    }
+}
+
+private struct DashboardChecklistPanel<Content: View>: View {
+    let isEmpty: Bool
+    let emptyTitle: String
+    let emptyAction: () -> Void
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        if isEmpty {
+            EmptyStateView(text: emptyTitle, action: emptyAction)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ScrollView {
+                VStack(spacing: 8) {
+                    content()
                 }
-                if dashboard.scheduleEvents.isEmpty {
-                    EmptyStateView(text: "Connect a calendar in Settings.")
-                } else {
-                    ForEach(dashboard.scheduleEvents) { event in
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(event.title)
-                                    .font(.body.weight(.semibold))
-                                if let calendarName = event.calendarName {
-                                    Text(calendarName)
-                                        .font(.caption.weight(.bold))
-                                        .foregroundStyle(HubTheme.profileColor(event.color))
-                                }
-                            }
-                            Spacer()
-                            if let timezone = TimeZone(identifier: dashboard.household.timezone) {
-                                Text(
-                                    event.allDay
-                                        ? "All day"
-                                        : DateHelpers.timeString(event.startsAt, timezone: timezone)
-                                )
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(HubTheme.muted)
-                            }
+            }
+            .scrollIndicators(.hidden)
+        }
+    }
+}
+
+// MARK: - Schedule
+
+private struct TodaySchedulePanel: View {
+    let events: [ScheduleEvent]
+    let timezone: TimeZone
+    let connected: Bool
+    let onConnect: () -> Void
+
+    @State private var now = Date.now
+    @State private var endTimer: Timer?
+
+    private var visibleEvents: [ScheduleEvent] {
+        Array(DashboardHelpers.upcomingScheduleEvents(events, now: now).prefix(5))
+    }
+
+    var body: some View {
+        Group {
+            if visibleEvents.isEmpty {
+                EmptyStateView(text: emptyMessage, action: connected ? nil : onConnect)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    VStack(spacing: 8) {
+                        ForEach(visibleEvents) { event in
+                            ScheduleEventRow(event: event, timezone: timezone)
                         }
-                        .padding(12)
-                        .background(HubTheme.tileQuiet)
-                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     }
                 }
+                .scrollIndicators(.hidden)
             }
+        }
+        .onAppear {
+            now = .now
+            scheduleEndTimer()
+        }
+        .onDisappear {
+            endTimer?.invalidate()
+        }
+        .onChange(of: events.map(\.eventId)) { _, _ in
+            scheduleEndTimer()
+        }
+        .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { date in
+            now = date
+            scheduleEndTimer()
         }
     }
 
-    private func routinesSection(_ dashboard: DashboardData) -> some View {
-        HubCard {
-            VStack(alignment: .leading, spacing: 12) {
-                CardTitleView(systemImage: "checklist", title: "Today's Routines") {
-                    appState.selectedDestination = .routines
-                }
-                let pending = dashboard.routineSteps.filter { !$0.completed }
-                if pending.isEmpty {
-                    EmptyStateView(
-                        text: dashboard.routineSteps.isEmpty
-                            ? "Add a morning or bedtime routine."
-                            : "All routines done for today!"
-                    ) {
-                        appState.selectedDestination = .routines
-                    }
-                } else {
-                    ForEach(pending.prefix(5)) { step in
-                        RoutineCheckRow(step: step, localDate: dashboard.localDate)
-                    }
+    private var emptyMessage: String {
+        if !connected {
+            return "Connect a calendar to see today's events."
+        }
+        if events.isEmpty {
+            return "Nothing on the calendar today."
+        }
+        return "Nothing left on the calendar today."
+    }
+
+    private func scheduleEndTimer() {
+        endTimer?.invalidate()
+        guard let nextEnd = DashboardHelpers.nextTimedEventEnd(after: now, in: events) else { return }
+        let interval = nextEnd.timeIntervalSince(now) + 0.05
+        guard interval > 0 else { return }
+        endTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { _ in
+            now = .now
+            scheduleEndTimer()
+        }
+    }
+}
+
+private struct ScheduleEventRow: View {
+    let event: ScheduleEvent
+    let timezone: TimeZone
+
+    var body: some View {
+        HStack(spacing: 10) {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(HubTheme.profileColor(event.color))
+                .frame(width: 5, height: 36)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(event.title)
+                    .font(.subheadline.weight(.bold))
+                    .lineLimit(1)
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(HubTheme.muted)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(HubTheme.tileQuiet)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private var subtitle: String {
+        let time = event.allDay
+            ? "All day"
+            : DateHelpers.timeString(event.startsAt, timezone: timezone)
+        if let calendarName = event.calendarName {
+            return "\(time) · \(calendarName)"
+        }
+        return time
+    }
+}
+
+// MARK: - Meals
+
+private struct MealSlotRow: View {
+    let slot: MealSlot
+    let meal: Meal?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(slot.label.uppercased())
+                .font(.caption2.weight(.heavy))
+                .foregroundStyle(HubTheme.muted)
+
+            let lines = DashboardHelpers.mealLines(meal?.title ?? "")
+            if lines.isEmpty {
+                Text("Not planned")
+                    .font(.subheadline.weight(.semibold))
+            } else {
+                ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
+                    Text(line)
+                        .font(index == 0 ? .subheadline.weight(.semibold) : .subheadline)
+                        .foregroundStyle(index == 0 ? Color.primary : HubTheme.muted)
+                        .lineLimit(2)
                 }
             }
         }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(HubTheme.tileQuiet)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
+}
 
-    private func choresSection(_ dashboard: DashboardData) -> some View {
-        HubCard {
-            VStack(alignment: .leading, spacing: 12) {
-                CardTitleView(systemImage: "checkmark.square.fill", title: "Chores") {
-                    appState.selectedDestination = .chores
-                }
-                let pending = dashboard.chores.filter { !$0.completed }
-                if pending.isEmpty {
-                    EmptyStateView(text: "Add the first family chore.") {
-                        appState.selectedDestination = .chores
-                    }
-                } else {
-                    ForEach(pending.prefix(5)) { chore in
-                        ChoreCheckRow(chore: chore)
-                    }
-                }
-            }
-        }
-    }
+// MARK: - Snacks
 
-    private func mealsSection(_ dashboard: DashboardData) -> some View {
-        HubCard {
-            VStack(alignment: .leading, spacing: 12) {
-                CardTitleView(systemImage: "fork.knife", title: "Today's Meals") {
-                    appState.selectedDestination = .meals
-                }
-                ForEach([MealSlot.breakfast, .lunch, .dinner], id: \.self) { slot in
-                    let meal = dashboard.meals.first { $0.slot == slot }
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(slot.label.uppercased())
-                            .font(.caption2.weight(.heavy))
-                            .foregroundStyle(HubTheme.muted)
-                        Text(meal?.title.isEmpty == false ? meal!.title : "Not planned")
-                            .font(.subheadline.weight(.semibold))
-                    }
-                    .padding(14)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(HubTheme.tileQuiet)
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                }
-            }
-        }
-        .background(HubTheme.sunSoft.opacity(0.5))
-    }
+private struct SnacksDashboardPanel: View {
+    @EnvironmentObject private var appState: AppState
+    let dashboard: DashboardData
 
-    private func snacksSection(_ dashboard: DashboardData) -> some View {
-        HubCard {
-            VStack(alignment: .leading, spacing: 12) {
-                CardTitleView(systemImage: "carrot.fill", title: "Snacks") {
-                    appState.selectedDestination = .snacks
-                }
-                let eaten = Set(dashboard.snackEaten)
-                let pending = dashboard.snackOptions.filter { !eaten.contains($0) }
-                if pending.isEmpty {
-                    EmptyStateView(
-                        text: dashboard.snackOptions.isEmpty
-                            ? "Add snack options for the family."
-                            : "All snacks eaten for today!"
-                    ) {
-                        appState.selectedDestination = .snacks
-                    }
-                } else {
+    private var eaten: Set<String> { Set(dashboard.snackEaten) }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            if dashboard.snackOptions.isEmpty {
+                EmptyStateView(
+                    text: "Add snack options for the family.",
+                    action: { appState.selectedDestination = .snacks }
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                        ForEach(pending.prefix(6), id: \.self) { snack in
-                            SnackCheckRow(label: snack, localDate: dashboard.localDate)
+                        ForEach(dashboard.snackOptions.prefix(6), id: \.self) { snack in
+                            SnackCheckRow(
+                                label: snack,
+                                localDate: dashboard.localDate,
+                                isEaten: eaten.contains(snack)
+                            )
                         }
                     }
                 }
-                if !dashboard.snackOptions.isEmpty {
-                    Text("\(dashboard.snackEaten.count) of \(dashboard.snackOptions.count) eaten today")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(HubTheme.muted)
-                        .frame(maxWidth: .infinity)
-                }
+                .scrollIndicators(.hidden)
+            }
+
+            if !dashboard.snackOptions.isEmpty {
+                Text("\(dashboard.snackEaten.count) of \(dashboard.snackOptions.count) eaten today")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(HubTheme.muted)
+                    .frame(maxWidth: .infinity)
             }
         }
     }
 }
 
+// MARK: - Check rows
+
 private struct RoutineCheckRow: View {
     @EnvironmentObject private var appState: AppState
     let step: RoutineStepRow
     let localDate: String
-    @State private var isChecked = false
+    @State private var isChecked: Bool
+
+    init(step: RoutineStepRow, localDate: String) {
+        self.step = step
+        self.localDate = localDate
+        _isChecked = State(initialValue: step.completed)
+    }
 
     var body: some View {
         CheckItemView(
             label: step.label,
             detail: step.profileId == nil ? step.routineName : profileName,
+            color: profileColor,
             isChecked: $isChecked,
             removeWhenChecked: true
         ) {
@@ -230,6 +409,10 @@ private struct RoutineCheckRow: View {
 
     private var profileName: String {
         appState.dashboard?.profiles.first { $0.id == step.profileId }?.name ?? step.routineName
+    }
+
+    private var profileColor: String? {
+        appState.dashboard?.profiles.first { $0.id == step.profileId }?.color
     }
 }
 
@@ -247,7 +430,9 @@ private struct ChoreCheckRow: View {
         CheckItemView(
             label: chore.title,
             detail: appState.dashboard?.profiles.first { $0.id == chore.profileId }?.name ?? "Anyone",
-            isChecked: $isChecked
+            color: profileColor,
+            isChecked: $isChecked,
+            removeWhenChecked: true
         ) {
             try? await appState.api.toggleChore(
                 ToggleChoreRequest(choreId: chore.id, periodKey: chore.periodKey)
@@ -255,20 +440,35 @@ private struct ChoreCheckRow: View {
             await appState.refreshDashboard()
         }
     }
+
+    private var profileColor: String? {
+        appState.dashboard?.profiles.first { $0.id == chore.profileId }?.color
+    }
 }
 
 private struct SnackCheckRow: View {
     @EnvironmentObject private var appState: AppState
     let label: String
     let localDate: String
-    @State private var isChecked = false
+    let isEaten: Bool
+    @State private var isChecked: Bool
+
+    init(label: String, localDate: String, isEaten: Bool) {
+        self.label = label
+        self.localDate = localDate
+        self.isEaten = isEaten
+        _isChecked = State(initialValue: isEaten)
+    }
 
     var body: some View {
-        CheckItemView(label: label, isChecked: $isChecked, removeWhenChecked: true) {
+        CheckItemView(label: label, isChecked: $isChecked) {
             try? await appState.api.toggleSnack(
                 ToggleSnackRequest(localDate: localDate, snackLabel: label)
             )
             await appState.refreshDashboard()
+        }
+        .onChange(of: isEaten) { _, eaten in
+            isChecked = eaten
         }
     }
 }

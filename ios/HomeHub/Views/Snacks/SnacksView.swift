@@ -64,7 +64,7 @@ struct SnacksView: View {
                 Label("Snack checklist", systemImage: "carrot.fill")
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(HubTheme.sage)
-                Text("Check off snacks as they're eaten. Each item can only be checked once per day.")
+                Text("Check off snacks as they're eaten. Checked items stay on the list with a strikethrough.")
                     .font(.footnote)
                     .foregroundStyle(HubTheme.muted)
 
@@ -76,15 +76,13 @@ struct SnacksView: View {
                             ? "Add snack options in the panel."
                             : "No snacks listed yet."
                     )
-                } else if viewModel.allEaten {
-                    Text("All snacks eaten for today!")
-                        .font(.subheadline.weight(.bold))
-                        .foregroundStyle(HubTheme.muted)
-                        .frame(maxWidth: .infinity, minHeight: 96)
                 } else {
                     VStack(spacing: 8) {
-                        ForEach(viewModel.pendingSnacks, id: \.self) { snack in
-                            SnackCheckRow(label: snack) {
+                        ForEach(viewModel.snackOptions, id: \.self) { snack in
+                            SnackCheckRow(
+                                label: snack,
+                                isEaten: viewModel.eaten.contains(snack)
+                            ) {
                                 await viewModel.toggleSnack(snack)
                             }
                         }
@@ -137,28 +135,24 @@ struct SnacksView: View {
 
 private struct SnackCheckRow: View {
     let label: String
+    let isEaten: Bool
     var onToggle: () async -> Void
 
-    @State private var isChecked = false
-    @State private var isHidden = false
-    @State private var isWorking = false
+    @State private var isChecked: Bool
+
+    init(label: String, isEaten: Bool, onToggle: @escaping () async -> Void) {
+        self.label = label
+        self.isEaten = isEaten
+        self.onToggle = onToggle
+        _isChecked = State(initialValue: isEaten)
+    }
 
     var body: some View {
-        if !isHidden {
-            CheckItemView(
-                label: label,
-                isChecked: $isChecked,
-                removeWhenChecked: true
-            ) {
-                isWorking = true
-                defer { isWorking = false }
-                await onToggle()
-                isChecked = true
-                withAnimation {
-                    isHidden = true
-                }
-            }
-            .disabled(isWorking)
+        CheckItemView(label: label, isChecked: $isChecked) {
+            await onToggle()
+        }
+        .onChange(of: isEaten) { _, eaten in
+            isChecked = eaten
         }
     }
 }

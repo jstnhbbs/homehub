@@ -60,29 +60,19 @@ export default async function SnacksPage() {
             <h2 className="font-display text-2xl font-semibold">Snack checklist</h2>
           </div>
           <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-            Check off snacks as they&apos;re eaten. Each item can only be checked once
-            per day and the list starts fresh every morning.
+            Check off snacks as they&apos;re eaten. Checked items stay on the list
+            with a strikethrough, and the checklist starts fresh every morning.
           </p>
           <div className="mt-5 space-y-2">
             {snackItems.length ? (
-              snackItems.some((item) => !eaten.has(item)) ? (
-                snackItems.map(
-                  (item) =>
-                    !eaten.has(item) && (
-                      <CheckItem
-                        key={item}
-                        label={item}
-                        initialChecked={false}
-                        removeWhenChecked
-                        onToggle={toggleSnack.bind(null, localDate, item)}
-                      />
-                    ),
-                )
-              ) : (
-                <p className="rounded-2xl border border-dashed border-[var(--line)] p-8 text-center text-sm font-bold text-[var(--muted)]">
-                  All snacks eaten for today!
-                </p>
-              )
+              snackItems.map((item) => (
+                <CheckItem
+                  key={item}
+                  label={item}
+                  initialChecked={eaten.has(item)}
+                  onToggle={toggleSnack.bind(null, localDate, item)}
+                />
+              ))
             ) : (
               <p className="rounded-2xl border border-dashed border-[var(--line)] p-8 text-center text-sm text-[var(--muted)]">
                 {canManage
