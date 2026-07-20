@@ -78,7 +78,7 @@ struct SnacksView: View {
                     )
                 } else {
                     VStack(spacing: 8) {
-                        ForEach(viewModel.snackOptions, id: \.self) { snack in
+                        ForEach(viewModel.displayedSnacks, id: \.self) { snack in
                             SnackCheckRow(
                                 label: snack,
                                 isEaten: viewModel.eaten.contains(snack)

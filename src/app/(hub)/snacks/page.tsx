@@ -8,12 +8,12 @@ import { snackCompletions } from "@/db/schema";
 import { localDateIn } from "@/lib/dates";
 import { requireHousehold } from "@/lib/household";
 import { canManageHousehold } from "@/lib/household-roles";
-import { parseSnackOptions } from "@/lib/meals/snacks";
+import { parseSnackOptions, sortSnackOptions } from "@/lib/meals/snacks";
 
 export default async function SnacksPage() {
   const household = await requireHousehold();
   const localDate = localDateIn(household.timezone);
-  const snackItems = parseSnackOptions(household.snackOptions);
+  const snackOptions = parseSnackOptions(household.snackOptions);
   const completions = await db
     .select({ snackLabel: snackCompletions.snackLabel })
     .from(snackCompletions)
@@ -24,6 +24,7 @@ export default async function SnacksPage() {
       ),
     );
   const eaten = new Set(completions.map((item) => item.snackLabel));
+  const snackItems = sortSnackOptions(snackOptions, eaten);
   const canManage = canManageHousehold(household.role);
   const dateLabel = formatInTimeZone(
     new Date(`${localDate}T12:00:00`),

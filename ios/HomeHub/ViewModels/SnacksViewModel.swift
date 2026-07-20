@@ -22,12 +22,8 @@ final class SnacksViewModel: ObservableObject {
         appState?.canManageHousehold ?? false
     }
 
-    var pendingSnacks: [String] {
-        snackOptions.filter { !eaten.contains($0) }
-    }
-
-    var allEaten: Bool {
-        !snackOptions.isEmpty && pendingSnacks.isEmpty
+    var displayedSnacks: [String] {
+        SnackHelpers.sortedSnackOptions(snackOptions, eaten: eaten)
     }
 
     func load() async {
@@ -57,7 +53,11 @@ final class SnacksViewModel: ObservableObject {
             try await appState.api.toggleSnack(
                 ToggleSnackRequest(localDate: localDate, snackLabel: label)
             )
-            eaten.insert(label)
+            if eaten.contains(label) {
+                eaten.remove(label)
+            } else {
+                eaten.insert(label)
+            }
             await appState.refreshDashboard()
             if let dashboard = appState.dashboard {
                 eaten = Set(dashboard.snackEaten)

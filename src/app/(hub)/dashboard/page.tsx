@@ -34,7 +34,7 @@ import {
 import { expandIcalEvent } from "@/lib/caldav/ical";
 import { localDateIn, weekKey } from "@/lib/dates";
 import { isChoreDueOnDate } from "@/lib/chores";
-import { parseSnackOptions } from "@/lib/meals/snacks";
+import { parseSnackOptions, sortSnackOptions } from "@/lib/meals/snacks";
 import { requireHousehold } from "@/lib/household";
 import { canManageHousehold } from "@/lib/household-roles";
 
@@ -183,8 +183,11 @@ export default async function DashboardPage() {
   const calendarStatus = calendarSyncStatus(connectionRows, household.timezone);
   const canManage = canManageHousehold(household.role);
   const mealSlots = ["breakfast", "lunch", "dinner"] as const;
-  const snackItems = parseSnackOptions(household.snackOptions);
   const snackEaten = new Set(snackDone.map((item) => item.snackLabel));
+  const snackItems = sortSnackOptions(
+    parseSnackOptions(household.snackOptions),
+    snackEaten,
+  );
 
   return (
     <div className="mx-auto max-w-[1500px]">

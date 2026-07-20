@@ -12,4 +12,11 @@ enum SnackHelpers {
     static func serializeSnackOptions(_ lines: [String]) -> String {
         lines.joined(separator: "\n")
     }
+
+    /// Unchecked snacks first (original order), then checked snacks at the bottom.
+    static func sortedSnackOptions(_ options: [String], eaten: Set<String>) -> [String] {
+        let pending = options.filter { !eaten.contains($0) }
+        let done = options.filter { eaten.contains($0) }
+        return pending + done
+    }
 }

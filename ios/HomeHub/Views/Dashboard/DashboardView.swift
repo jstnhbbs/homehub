@@ -344,6 +344,9 @@ private struct SnacksDashboardPanel: View {
     let dashboard: DashboardData
 
     private var eaten: Set<String> { Set(dashboard.snackEaten) }
+    private var sortedSnacks: [String] {
+        SnackHelpers.sortedSnackOptions(dashboard.snackOptions, eaten: eaten)
+    }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -356,7 +359,7 @@ private struct SnacksDashboardPanel: View {
             } else {
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                        ForEach(dashboard.snackOptions.prefix(6), id: \.self) { snack in
+                        ForEach(sortedSnacks.prefix(6), id: \.self) { snack in
                             SnackCheckRow(
                                 label: snack,
                                 localDate: dashboard.localDate,
