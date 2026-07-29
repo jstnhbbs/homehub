@@ -244,12 +244,13 @@ export function NapHistoryRow({
     nap.endedAt ? toLocalDateTimeInput(new Date(nap.endedAt), timezone) : "",
   );
 
-  useEffect(() => {
+  function beginEditing() {
     setStartedAt(toLocalDateTimeInput(new Date(nap.startedAt), timezone));
     setEndedAt(
       nap.endedAt ? toLocalDateTimeInput(new Date(nap.endedAt), timezone) : "",
     );
-  }, [nap.startedAt, nap.endedAt, timezone]);
+    setEditing(true);
+  }
 
   const startedLabel = formatInTimeZone(
     new Date(nap.startedAt),
@@ -293,7 +294,7 @@ export function NapHistoryRow({
             <button
               type="button"
               className="text-xs font-bold text-[var(--sage)]"
-              onClick={() => setEditing(true)}
+              onClick={beginEditing}
             >
               Edit
             </button>

@@ -6,7 +6,6 @@ import {
   fetchTodayNaps,
   serializeNap,
   startNap,
-  updateNapTimes,
 } from "@/lib/naps/store";
 import {
   handleMobileError,
