@@ -1,7 +1,7 @@
 import { formatInTimeZone } from "date-fns-tz";
 import { Moon } from "lucide-react";
 import Link from "next/link";
-import { NapChildRow, NapHistoryRow } from "@/components/nap-controls";
+import { NapChildRow, NapHistoryRow, ManualNapForm } from "@/components/nap-controls";
 import { formatNapDuration, totalNapMinutes } from "@/lib/naps/helpers";
 import { fetchTodayNaps } from "@/lib/naps/store";
 import { requireHousehold } from "@/lib/household";
@@ -53,6 +53,7 @@ export default async function NapsPage() {
                         ? {
                             id: activeNap.id,
                             profileId: activeNap.profileId,
+                            localDate: activeNap.localDate,
                             startedAt: activeNap.startedAt.toISOString(),
                             endedAt: activeNap.endedAt?.toISOString() ?? null,
                           }
@@ -62,6 +63,19 @@ export default async function NapsPage() {
                   />
                 );
               })}
+            </div>
+          </section>
+
+          <section className="hub-card p-5 max-md:p-4">
+            <h2 className="font-display text-2xl font-semibold">Add nap manually</h2>
+            <p className="mt-2 text-sm text-[var(--muted)]">
+              Log a nap after the fact or adjust the exact start and end times.
+            </p>
+            <div className="mt-4">
+              <ManualNapForm
+                childProfiles={childProfiles}
+                timezone={household.timezone}
+              />
             </div>
           </section>
 
@@ -85,6 +99,7 @@ export default async function NapsPage() {
                       nap={{
                         id: nap.id,
                         profileId: nap.profileId,
+                        localDate: nap.localDate,
                         startedAt: nap.startedAt.toISOString(),
                         endedAt: nap.endedAt?.toISOString() ?? null,
                       }}

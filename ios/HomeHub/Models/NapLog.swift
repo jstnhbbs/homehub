@@ -19,4 +19,11 @@ struct NapActionRequest: Encodable, Sendable {
     let action: String
     var profileId: String?
     var napId: String?
+    var startedAt: Date?
+    var endedAt: Date?
+}
+
+struct UpdateNapRequest: Encodable, Sendable {
+    let startedAt: Date
+    let endedAt: Date?
 }

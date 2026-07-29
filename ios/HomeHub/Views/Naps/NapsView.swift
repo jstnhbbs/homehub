@@ -25,6 +25,7 @@ struct NapsView: View {
                             .frame(maxWidth: .infinity, minHeight: 240)
                     } else if let payload {
                         quickLogSection(payload)
+                        manualEntrySection(payload)
                         historySection(payload)
                     }
                 }
@@ -76,6 +77,18 @@ struct NapsView: View {
     }
 
     @ViewBuilder
+    private func manualEntrySection(_ payload: NapsPayload) -> some View {
+        HubCard {
+            ManualNapFormView(
+                childProfiles: payload.childProfiles,
+                timezone: TimeZone(identifier: appState.household?.timezone ?? "") ?? .current
+            ) { profileId, startedAt, endedAt in
+                await createNap(profileId: profileId, startedAt: startedAt, endedAt: endedAt)
+            }
+        }
+    }
+
+    @ViewBuilder
     private func historySection(_ payload: NapsPayload) -> some View {
         HubCard {
             VStack(alignment: .leading, spacing: 12) {
@@ -98,6 +111,9 @@ struct NapsView: View {
                                 timezone: TimeZone(identifier: appState.household?.timezone ?? "") ?? .current,
                                 now: now,
                                 endAction: nap.endedAt == nil ? { await endNap(napId: nap.id) } : nil,
+                                saveAction: { startedAt, endedAt in
+                                    await updateNap(id: nap.id, startedAt: startedAt, endedAt: endedAt)
+                                },
                                 deleteAction: { await deleteNap(id: nap.id) }
                             )
                         }
@@ -128,9 +144,29 @@ struct NapsView: View {
         }
     }
 
+    private func createNap(profileId: String, startedAt: Date, endedAt: Date?) async {
+        do {
+            try await appState.api.createNap(profileId: profileId, startedAt: startedAt, endedAt: endedAt)
+            await appState.refreshDashboard()
+            await load()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func endNap(napId: String) async {
         do {
             try await appState.api.endNap(napId: napId)
+            await appState.refreshDashboard()
+            await load()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func updateNap(id: String, startedAt: Date, endedAt: Date?) async {
+        do {
+            try await appState.api.updateNap(id: id, startedAt: startedAt, endedAt: endedAt)
             await appState.refreshDashboard()
             await load()
         } catch {
@@ -145,6 +181,80 @@ struct NapsView: View {
             await load()
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+}
+
+private struct ManualNapFormView: View {
+    let childProfiles: [Profile]
+    let timezone: TimeZone
+    let onSubmit: (String, Date, Date?) async -> Void
+
+    @State private var selectedProfileId: String
+    @State private var startedAt: Date
+    @State private var endedAt: Date?
+    @State private var includeEndTime = false
+
+    init(
+        childProfiles: [Profile],
+        timezone: TimeZone,
+        onSubmit: @escaping (String, Date, Date?) async -> Void
+    ) {
+        self.childProfiles = childProfiles
+        self.timezone = timezone
+        self.onSubmit = onSubmit
+        _selectedProfileId = State(initialValue: childProfiles.first?.id ?? "")
+        _startedAt = State(initialValue: Date.now)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Add nap manually")
+                .font(.title3.weight(.semibold))
+
+            if childProfiles.isEmpty {
+                Text("Add a child profile in Settings to log naps.")
+                    .font(.footnote)
+                    .foregroundStyle(HubTheme.muted)
+            } else {
+                Picker("Child", selection: $selectedProfileId) {
+                    ForEach(childProfiles) { profile in
+                        Text(profile.name).tag(profile.id)
+                    }
+                }
+
+                DatePicker(
+                    "Start time",
+                    selection: $startedAt,
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+
+                Toggle("Set end time", isOn: $includeEndTime)
+
+                if includeEndTime {
+                    DatePicker(
+                        "End time",
+                        selection: Binding(
+                            get: { endedAt ?? startedAt.addingTimeInterval(3600) },
+                            set: { endedAt = $0 }
+                        ),
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
+                }
+
+                Button("Add nap") {
+                    Task {
+                        await onSubmit(
+                            selectedProfileId,
+                            startedAt,
+                            includeEndTime ? (endedAt ?? startedAt.addingTimeInterval(3600)) : nil
+                        )
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(HubTheme.sage)
+                .disabled(selectedProfileId.isEmpty)
+            }
         }
     }
 }
@@ -215,36 +325,117 @@ private struct NapHistoryRowView: View {
     let timezone: TimeZone
     let now: Date
     let endAction: (() async -> Void)?
+    let saveAction: (Date, Date?) async -> Void
     let deleteAction: () async -> Void
 
+    @State private var isEditing = false
+    @State private var startedAt: Date
+    @State private var endedAt: Date?
+    @State private var includeEndTime: Bool
+
+    init(
+        nap: NapLog,
+        profile: Profile,
+        timezone: TimeZone,
+        now: Date,
+        endAction: (() async -> Void)?,
+        saveAction: @escaping (Date, Date?) async -> Void,
+        deleteAction: @escaping () async -> Void
+    ) {
+        self.nap = nap
+        self.profile = profile
+        self.timezone = timezone
+        self.now = now
+        self.endAction = endAction
+        self.saveAction = saveAction
+        self.deleteAction = deleteAction
+        _startedAt = State(initialValue: nap.startedAt)
+        _endedAt = State(initialValue: nap.endedAt)
+        _includeEndTime = State(initialValue: nap.endedAt != nil)
+    }
+
     var body: some View {
-        HStack(spacing: 12) {
-            Circle()
-                .fill(HubTheme.profileColor(profile.color))
-                .frame(width: 12, height: 12)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Circle()
+                    .fill(HubTheme.profileColor(profile.color))
+                    .frame(width: 12, height: 12)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(profile.name)
-                    .font(.subheadline.weight(.bold))
-                Text("\(DateHelpers.timeString(nap.startedAt, timezone: timezone)) – \(endLabel) · \(durationLabel)")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(HubTheme.muted)
-            }
-
-            Spacer()
-
-            if let endAction {
-                Button("End") {
-                    Task { await endAction() }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(profile.name)
+                        .font(.subheadline.weight(.bold))
+                    if !isEditing {
+                        Text("\(DateHelpers.timeString(nap.startedAt, timezone: timezone)) – \(endLabel) · \(durationLabel)")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(HubTheme.muted)
+                    }
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.mini)
+
+                Spacer()
+
+                if !isEditing {
+                    if let endAction {
+                        Button("End") {
+                            Task { await endAction() }
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.mini)
+                    }
+
+                    Button("Edit") {
+                        startedAt = nap.startedAt
+                        endedAt = nap.endedAt
+                        includeEndTime = nap.endedAt != nil
+                        isEditing = true
+                    }
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(HubTheme.sage)
+
+                    Button("Delete", role: .destructive) {
+                        Task { await deleteAction() }
+                    }
+                    .font(.caption.weight(.bold))
+                }
             }
 
-            Button("Delete", role: .destructive) {
-                Task { await deleteAction() }
+            if isEditing {
+                DatePicker(
+                    "Start time",
+                    selection: $startedAt,
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+
+                Toggle("Set end time", isOn: $includeEndTime)
+
+                if includeEndTime {
+                    DatePicker(
+                        "End time",
+                        selection: Binding(
+                            get: { endedAt ?? startedAt.addingTimeInterval(3600) },
+                            set: { endedAt = $0 }
+                        ),
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
+                }
+
+                HStack {
+                    Button("Save") {
+                        Task {
+                            await saveAction(startedAt, includeEndTime ? endedAt : nil)
+                            isEditing = false
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(HubTheme.sage)
+                    .controlSize(.small)
+
+                    Button("Cancel") {
+                        isEditing = false
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
             }
-            .font(.caption.weight(.bold))
         }
         .padding(.vertical, 8)
     }

@@ -375,6 +375,8 @@ private struct NapsDashboardPanel: View {
                             DashboardNapRow(
                                 profile: profile,
                                 activeNap: NapHelpers.activeNap(for: profile.id, in: dashboard.naps),
+                                naps: dashboard.naps,
+                                localDate: dashboard.localDate,
                                 timezone: TimeZone(identifier: dashboard.household.timezone) ?? .current,
                                 now: now
                             )
@@ -402,6 +404,8 @@ private struct DashboardNapRow: View {
     @EnvironmentObject private var appState: AppState
     let profile: Profile
     let activeNap: NapLog?
+    let naps: [NapLog]
+    let localDate: String
     let timezone: TimeZone
     let now: Date
 
@@ -414,10 +418,16 @@ private struct DashboardNapRow: View {
                 Text(profile.name)
                     .font(.subheadline.weight(.bold))
                     .lineLimit(1)
-                Text(statusText)
+                if let activeNap {
+                    Text(activeStatus(for: activeNap))
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(HubTheme.muted)
+                        .lineLimit(1)
+                }
+                Text(summaryText)
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(HubTheme.muted)
-                    .lineLimit(1)
+                    .lineLimit(2)
             }
             Spacer(minLength: 0)
             if activeNap != nil {
@@ -448,11 +458,20 @@ private struct DashboardNapRow: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    private var statusText: String {
-        guard let activeNap else { return "No active nap" }
-        let minutes = NapHelpers.durationMinutes(startedAt: activeNap.startedAt, endedAt: nil, now: now)
-        let started = DateHelpers.timeString(activeNap.startedAt, timezone: timezone)
+    private func activeStatus(for nap: NapLog) -> String {
+        let minutes = NapHelpers.durationMinutes(startedAt: nap.startedAt, endedAt: nil, now: now)
+        let started = DateHelpers.timeString(nap.startedAt, timezone: timezone)
         return "Asleep since \(started) · \(NapHelpers.formatDuration(minutes: minutes))"
+    }
+
+    private var summaryText: String {
+        NapHelpers.todaySummary(
+            for: profile.id,
+            in: naps,
+            localDate: localDate,
+            now: now,
+            isActive: activeNap != nil
+        )
     }
 }
 

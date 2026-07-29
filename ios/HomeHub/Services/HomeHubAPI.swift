@@ -229,6 +229,27 @@ final class HomeHubAPI: ObservableObject {
         try await client.requestVoid("/api/mobile/v1/naps/\(id)", method: "DELETE")
     }
 
+    func createNap(profileId: String, startedAt: Date, endedAt: Date?) async throws {
+        let _: OkResponse = try await client.request(
+            "/api/mobile/v1/naps",
+            method: "POST",
+            body: NapActionRequest(
+                action: "create",
+                profileId: profileId,
+                startedAt: startedAt,
+                endedAt: endedAt
+            )
+        )
+    }
+
+    func updateNap(id: String, startedAt: Date, endedAt: Date?) async throws {
+        let _: OkResponse = try await client.request(
+            "/api/mobile/v1/naps/\(id)",
+            method: "PATCH",
+            body: UpdateNapRequest(startedAt: startedAt, endedAt: endedAt)
+        )
+    }
+
     // MARK: - Calendar
 
     func fetchCalendarOccurrences(start: String, end: String, query: String = "") async throws -> [CalendarOccurrence] {

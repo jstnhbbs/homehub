@@ -395,6 +395,9 @@ export default async function DashboardPage() {
             {childProfiles.length ? (
               childProfiles.map((profile) => {
                 const activeNap = activeNaps.get(profile.id);
+                const profileNaps = napData.naps.filter(
+                  (nap) => nap.profileId === profile.id,
+                );
                 return (
                   <NapChildRow
                     key={profile.id}
@@ -404,11 +407,20 @@ export default async function DashboardPage() {
                         ? {
                             id: activeNap.id,
                             profileId: activeNap.profileId,
+                            localDate: activeNap.localDate,
                             startedAt: activeNap.startedAt.toISOString(),
                             endedAt: activeNap.endedAt?.toISOString() ?? null,
                           }
                         : undefined
                     }
+                    todayNaps={profileNaps.map((nap) => ({
+                      id: nap.id,
+                      profileId: nap.profileId,
+                      localDate: nap.localDate,
+                      startedAt: nap.startedAt.toISOString(),
+                      endedAt: nap.endedAt?.toISOString() ?? null,
+                    }))}
+                    localDate={napData.localDate}
                     timezone={household.timezone}
                     compact
                   />
