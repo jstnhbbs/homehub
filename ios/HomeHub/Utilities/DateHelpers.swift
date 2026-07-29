@@ -45,8 +45,24 @@ enum DateHelpers {
     }
 
     static func formatLocalDate(_ localDate: String, timezone: TimeZone, style: DateFormatter.Style = .medium) -> String {
+        guard let date = dateFromLocalDate(localDate, timezone: timezone) else { return localDate }
+        let formatter = DateFormatter()
+        formatter.timeZone = timezone
+        formatter.dateStyle = style
+        return formatter.string(from: date)
+    }
+
+    static func formatLocalDate(_ localDate: String, timezone: TimeZone, pattern: String) -> String {
+        guard let date = dateFromLocalDate(localDate, timezone: timezone) else { return localDate }
+        let formatter = DateFormatter()
+        formatter.timeZone = timezone
+        formatter.dateFormat = pattern
+        return formatter.string(from: date)
+    }
+
+    private static func dateFromLocalDate(_ localDate: String, timezone: TimeZone) -> Date? {
         let parts = localDate.split(separator: "-").compactMap { Int($0) }
-        guard parts.count == 3 else { return localDate }
+        guard parts.count == 3 else { return nil }
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timezone
         var components = DateComponents()
@@ -54,11 +70,7 @@ enum DateHelpers {
         components.month = parts[1]
         components.day = parts[2]
         components.hour = 12
-        guard let date = calendar.date(from: components) else { return localDate }
-        let formatter = DateFormatter()
-        formatter.timeZone = timezone
-        formatter.dateStyle = style
-        return formatter.string(from: date)
+        return calendar.date(from: components)
     }
 
     static func timeString(_ date: Date, timezone: TimeZone) -> String {

@@ -27,6 +27,8 @@ struct NapsView: View {
                         quickLogSection(payload)
                         manualEntrySection(payload)
                         historySection(payload)
+                        yesterdaySection(payload)
+                        weeklySection(payload)
                     }
                 }
                 .padding(24)
@@ -121,6 +123,144 @@ struct NapsView: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func yesterdaySection(_ payload: NapsPayload) -> some View {
+        HubCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Yesterday")
+                    .font(.title3.weight(.semibold))
+
+                Text(DateHelpers.formatLocalDate(payload.yesterdayLocalDate, timezone: timezone, pattern: "EEEE, MMMM d"))
+                    .font(.subheadline.weight(.bold))
+                    .foregroundStyle(HubTheme.muted)
+
+                if payload.yesterdayNaps.isEmpty {
+                    Text("No naps logged yesterday.")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(HubTheme.muted)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 24)
+                } else {
+                    ForEach(payload.childProfiles) { profile in
+                        let profileNaps = payload.yesterdayNaps.filter { $0.profileId == profile.id }
+                        if !profileNaps.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack(spacing: 8) {
+                                    Circle()
+                                        .fill(HubTheme.profileColor(profile.color))
+                                        .frame(width: 12, height: 12)
+                                    Text(profile.name)
+                                        .font(.subheadline.weight(.bold))
+                                    Text(NapHelpers.daySummary(
+                                        napCount: profileNaps.count,
+                                        totalMinutes: profileNaps.reduce(0) {
+                                            $0 + NapHelpers.durationMinutes(startedAt: $1.startedAt, endedAt: $1.endedAt, now: now)
+                                        }
+                                    ))
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(HubTheme.muted)
+                                }
+
+                                ForEach(profileNaps) { nap in
+                                    NapHistoryRowView(
+                                        nap: nap,
+                                        profile: profile,
+                                        timezone: timezone,
+                                        now: now,
+                                        endAction: nil,
+                                        saveAction: { startedAt, endedAt in
+                                            await updateNap(id: nap.id, startedAt: startedAt, endedAt: endedAt)
+                                        },
+                                        deleteAction: { await deleteNap(id: nap.id) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func weeklySection(_ payload: NapsPayload) -> some View {
+        let weekStartsOn = appState.household?.weekStartsOn ?? WeekStart.defaultWeekStartsOn
+        let dayLabels = WeekStart.weekdayLabels(weekStartsOn: weekStartsOn)
+
+        HubCard {
+            VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("This week")
+                        .font(.title3.weight(.semibold))
+                    if let start = payload.weekDates.first, let end = payload.weekDates.last {
+                        Text("\(DateHelpers.formatLocalDate(start, timezone: timezone, pattern: "MMM d")) – \(DateHelpers.formatLocalDate(end, timezone: timezone, pattern: "MMM d"))")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(HubTheme.muted)
+                    }
+                }
+
+                ForEach(payload.childProfiles) { profile in
+                    let stats = NapHelpers.childWeekStats(
+                        profileId: profile.id,
+                        naps: payload.weekNaps,
+                        weekDates: payload.weekDates,
+                        todayLocalDate: payload.localDate,
+                        now: now
+                    )
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(HubTheme.profileColor(profile.color))
+                                .frame(width: 12, height: 12)
+                            Text(profile.name)
+                                .font(.subheadline.weight(.bold))
+                            Text("Avg \(NapHelpers.formatAverageNapCount(stats.avgNapsPerDay)) naps/day · \(NapHelpers.formatDuration(minutes: Int(stats.avgMinutesPerDay.rounded())))/day")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(HubTheme.muted)
+                        }
+
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(Array(stats.days.enumerated()), id: \.element.localDate) { index, day in
+                                    let isToday = day.localDate == payload.localDate
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text(dayLabels[index])
+                                            .font(.caption2.weight(.heavy))
+                                            .foregroundStyle(HubTheme.muted)
+                                        Text(DateHelpers.formatLocalDate(day.localDate, timezone: timezone, pattern: "MMM d"))
+                                            .font(.caption2.weight(.bold))
+                                            .foregroundStyle(HubTheme.muted)
+                                        Text("\(day.napCount)")
+                                            .font(.title3.weight(.semibold))
+                                        Text(day.napCount == 0 ? "—" : NapHelpers.formatDuration(minutes: day.totalMinutes))
+                                            .font(.caption2.weight(.bold))
+                                            .foregroundStyle(HubTheme.muted)
+                                    }
+                                    .frame(width: 84, alignment: .leading)
+                                    .padding(12)
+                                    .background(isToday ? HubTheme.tileQuiet : Color.clear)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                            .stroke(isToday ? HubTheme.sage : HubTheme.line, lineWidth: 1)
+                                    )
+                                }
+                            }
+                        }
+
+                        Text("Week total: \(stats.totalNaps) naps · \(NapHelpers.formatDuration(minutes: stats.totalMinutes))")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(HubTheme.muted)
+                    }
+                }
+            }
+        }
+    }
+
+    private var timezone: TimeZone {
+        TimeZone(identifier: appState.household?.timezone ?? "") ?? .current
     }
 
     private func load() async {

@@ -1,4 +1,10 @@
+import { addDays } from "date-fns";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
+
+export function addLocalDays(localDate: string, timezone: string, days: number) {
+  const date = fromZonedTime(`${localDate}T12:00:00`, timezone);
+  return formatInTimeZone(addDays(date, days), timezone, "yyyy-MM-dd");
+}
 
 export function toLocalDateTimeInput(value: Date, timezone: string) {
   return formatInTimeZone(value, timezone, "yyyy-MM-dd'T'HH:mm");

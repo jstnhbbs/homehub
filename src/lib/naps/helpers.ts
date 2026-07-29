@@ -24,6 +24,106 @@ export function totalNapMinutes(
   );
 }
 
+export type ChildDayNapStats = {
+  localDate: string;
+  napCount: number;
+  totalMinutes: number;
+};
+
+export type ChildWeekNapStats = {
+  profileId: string;
+  days: ChildDayNapStats[];
+  totalNaps: number;
+  totalMinutes: number;
+  avgNapsPerDay: number;
+  avgMinutesPerDay: number;
+  elapsedDays: number;
+};
+
+export function childNapsForDate<
+  T extends { profileId: string; localDate: string },
+>(naps: T[], profileId: string, localDate: string) {
+  return naps.filter(
+    (nap) => nap.profileId === profileId && nap.localDate === localDate,
+  );
+}
+
+export function dayNapStats<
+  T extends { startedAt: Date; endedAt: Date | null },
+>(naps: T[], now: Date = new Date()) {
+  return {
+    napCount: naps.length,
+    totalMinutes: totalNapMinutes(naps, now),
+  };
+}
+
+export function childDayNapStats<
+  T extends {
+    profileId: string;
+    localDate: string;
+    startedAt: Date;
+    endedAt: Date | null;
+  },
+>(
+  naps: T[],
+  profileId: string,
+  localDate: string,
+  now: Date = new Date(),
+): ChildDayNapStats {
+  const dayNaps = childNapsForDate(naps, profileId, localDate);
+  return {
+    localDate,
+    ...dayNapStats(dayNaps, now),
+  };
+}
+
+export function childWeekNapStats<
+  T extends {
+    profileId: string;
+    localDate: string;
+    startedAt: Date;
+    endedAt: Date | null;
+  },
+>(
+  naps: T[],
+  profileId: string,
+  weekDates: string[],
+  todayLocalDate: string,
+  now: Date = new Date(),
+): ChildWeekNapStats {
+  const days = weekDates.map((localDate) =>
+    childDayNapStats(
+      naps,
+      profileId,
+      localDate,
+      localDate === todayLocalDate ? now : now,
+    ),
+  );
+  const elapsedDays = weekDates.filter((date) => date <= todayLocalDate).length;
+  const totalNaps = days.reduce((sum, day) => sum + day.napCount, 0);
+  const totalMinutes = days.reduce((sum, day) => sum + day.totalMinutes, 0);
+
+  return {
+    profileId,
+    days,
+    totalNaps,
+    totalMinutes,
+    avgNapsPerDay: elapsedDays ? totalNaps / elapsedDays : 0,
+    avgMinutesPerDay: elapsedDays ? totalMinutes / elapsedDays : 0,
+    elapsedDays,
+  };
+}
+
+export function formatChildDaySummary(napCount: number, totalMinutes: number) {
+  if (napCount === 0) return "No naps";
+  return `${napCount} nap${napCount === 1 ? "" : "s"} · ${formatNapDuration(totalMinutes)} total`;
+}
+
+export function formatAverageNapCount(value: number) {
+  if (Number.isInteger(value)) return String(value);
+  return value.toFixed(1);
+}
+
 export function formatChildTodayNapSummary(
   naps: Array<{ localDate: string; startedAt: Date; endedAt: Date | null }>,
   localDate: string,

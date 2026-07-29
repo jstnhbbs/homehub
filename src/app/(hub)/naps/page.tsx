@@ -2,13 +2,22 @@ import { formatInTimeZone } from "date-fns-tz";
 import { Moon } from "lucide-react";
 import Link from "next/link";
 import { NapChildRow, NapHistoryRow, ManualNapForm } from "@/components/nap-controls";
+import { NapPreviousDaySection, NapWeeklySection } from "@/components/nap-stats";
 import { formatNapDuration, totalNapMinutes } from "@/lib/naps/helpers";
-import { fetchTodayNaps } from "@/lib/naps/store";
+import { fetchNapPageData } from "@/lib/naps/store";
 import { requireHousehold } from "@/lib/household";
 
 export default async function NapsPage() {
   const household = await requireHousehold();
-  const { localDate, childProfiles, naps } = await fetchTodayNaps(household);
+  const {
+    localDate,
+    yesterdayLocalDate,
+    weekDates,
+    childProfiles,
+    naps,
+    yesterdayNaps,
+    weekNaps,
+  } = await fetchNapPageData(household);
   const profileMap = new Map(childProfiles.map((profile) => [profile.id, profile]));
   const activeByProfile = new Map(
     naps
@@ -116,6 +125,22 @@ export default async function NapsPage() {
               )}
             </div>
           </section>
+
+          <NapPreviousDaySection
+            childProfiles={childProfiles}
+            naps={yesterdayNaps}
+            localDate={yesterdayLocalDate}
+            timezone={household.timezone}
+          />
+
+          <NapWeeklySection
+            childProfiles={childProfiles}
+            naps={weekNaps}
+            weekDates={weekDates}
+            todayLocalDate={localDate}
+            timezone={household.timezone}
+            weekStartsOn={household.weekStartsOn}
+          />
         </div>
       ) : (
         <section className="hub-card mt-6 p-8 text-center">

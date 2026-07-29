@@ -3,7 +3,7 @@ import {
   createManualNap,
   endNap,
   endNapForProfile,
-  fetchTodayNaps,
+  fetchNapPageData,
   serializeNap,
   startNap,
 } from "@/lib/naps/store";
@@ -19,11 +19,23 @@ const isoDate = z.string().datetime();
 export async function GET() {
   try {
     const household = await requireMobileHousehold();
-    const { localDate, childProfiles, naps } = await fetchTodayNaps(household);
+    const {
+      localDate,
+      yesterdayLocalDate,
+      weekDates,
+      childProfiles,
+      naps,
+      yesterdayNaps,
+      weekNaps,
+    } = await fetchNapPageData(household);
     return mobileJson({
       localDate,
+      yesterdayLocalDate,
+      weekDates,
       childProfiles,
       naps: naps.map(serializeNap),
+      yesterdayNaps: yesterdayNaps.map(serializeNap),
+      weekNaps: weekNaps.map(serializeNap),
     });
   } catch (error) {
     return handleMobileError(error);

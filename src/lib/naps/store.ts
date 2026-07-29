@@ -1,8 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, isNull, ne, or } from "drizzle-orm";
+import { and, asc, eq, gte, isNull, lte, ne, or } from "drizzle-orm";
+import { format } from "date-fns";
+import { fromZonedTime } from "date-fns-tz";
 import { db } from "@/db/client";
 import { napLogs, profiles } from "@/db/schema";
-import { localDateIn } from "@/lib/dates";
+import { parseWeekStartsOn } from "@/lib/calendar/week-start";
+import { localDateIn, weekDates } from "@/lib/dates";
+import { addLocalDays } from "@/lib/naps/datetime";
 import type { getCurrentHousehold } from "@/lib/household";
 
 type Household = NonNullable<Awaited<ReturnType<typeof getCurrentHousehold>>>;
@@ -96,6 +100,71 @@ export async function fetchNapsForDate(household: Household, localDate: string) 
     .orderBy(asc(napLogs.startedAt));
 
   return rows.map(mapNap);
+}
+
+export async function fetchNapsForLocalDate(household: Household, localDate: string) {
+  const rows = await db
+    .select()
+    .from(napLogs)
+    .where(
+      and(
+        eq(napLogs.householdId, household.id),
+        eq(napLogs.localDate, localDate),
+      ),
+    )
+    .orderBy(asc(napLogs.startedAt));
+
+  return rows.map(mapNap);
+}
+
+export async function fetchNapsInRange(
+  household: Household,
+  startLocalDate: string,
+  endLocalDate: string,
+) {
+  const rows = await db
+    .select()
+    .from(napLogs)
+    .where(
+      and(
+        eq(napLogs.householdId, household.id),
+        gte(napLogs.localDate, startLocalDate),
+        lte(napLogs.localDate, endLocalDate),
+      ),
+    )
+    .orderBy(asc(napLogs.startedAt));
+
+  return rows.map(mapNap);
+}
+
+export async function fetchNapPageData(household: Household) {
+  const localDate = localDateIn(household.timezone);
+  const yesterdayLocalDate = addLocalDays(localDate, household.timezone, -1);
+  const weekStartsOn = parseWeekStartsOn(household.weekStartsOn);
+  const weekDays = weekDates(
+    fromZonedTime(`${localDate}T12:00:00`, household.timezone),
+    weekStartsOn,
+  );
+  const weekDatesList = weekDays.map((day) => format(day, "yyyy-MM-dd"));
+  const weekStart = weekDatesList[0];
+  const weekEnd = weekDatesList[6];
+
+  const [childProfiles, naps, yesterdayNaps, weekNaps] = await Promise.all([
+    fetchChildProfiles(household.id),
+    fetchNapsForDate(household, localDate),
+    fetchNapsForLocalDate(household, yesterdayLocalDate),
+    fetchNapsInRange(household, weekStart, weekEnd),
+  ]);
+
+  return {
+    localDate,
+    yesterdayLocalDate,
+    weekDates: weekDatesList,
+    childProfiles,
+    naps,
+    yesterdayNaps,
+    weekNaps,
+  };
 }
 
 export async function fetchTodayNaps(household: Household) {

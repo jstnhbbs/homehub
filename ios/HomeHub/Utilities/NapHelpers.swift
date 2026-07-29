@@ -1,5 +1,21 @@
 import Foundation
 
+struct ChildDayNapStats: Sendable {
+    let localDate: String
+    let napCount: Int
+    let totalMinutes: Int
+}
+
+struct ChildWeekNapStats: Sendable {
+    let profileId: String
+    let days: [ChildDayNapStats]
+    let totalNaps: Int
+    let totalMinutes: Int
+    let avgNapsPerDay: Double
+    let avgMinutesPerDay: Double
+    let elapsedDays: Int
+}
+
 enum NapHelpers {
     static func durationMinutes(startedAt: Date, endedAt: Date?, now: Date = .now) -> Int {
         let end = endedAt ?? now
@@ -52,5 +68,45 @@ enum NapHelpers {
         }
 
         return parts.joined(separator: " · ")
+    }
+
+    static func daySummary(napCount: Int, totalMinutes: Int) -> String {
+        if napCount == 0 { return "No naps" }
+        return "\(napCount) nap\(napCount == 1 ? "" : "s") · \(formatDuration(minutes: totalMinutes)) total"
+    }
+
+    static func formatAverageNapCount(_ value: Double) -> String {
+        if value.rounded(.towardZero) == value { return String(Int(value)) }
+        return String(format: "%.1f", value)
+    }
+
+    static func childWeekStats(
+        profileId: String,
+        naps: [NapLog],
+        weekDates: [String],
+        todayLocalDate: String,
+        now: Date = .now
+    ) -> ChildWeekNapStats {
+        let days = weekDates.map { localDate in
+            let dayNaps = todayNaps(for: profileId, in: naps, localDate: localDate)
+            let totalMinutes = dayNaps.reduce(0) { partial, nap in
+                partial + durationMinutes(startedAt: nap.startedAt, endedAt: nap.endedAt, now: now)
+            }
+            return ChildDayNapStats(localDate: localDate, napCount: dayNaps.count, totalMinutes: totalMinutes)
+        }
+        let elapsedDays = weekDates.filter { $0 <= todayLocalDate }.count
+        let totalNaps = days.reduce(0) { $0 + $1.napCount }
+        let totalMinutes = days.reduce(0) { $0 + $1.totalMinutes }
+        let avgDivisor = max(elapsedDays, 1)
+
+        return ChildWeekNapStats(
+            profileId: profileId,
+            days: days,
+            totalNaps: totalNaps,
+            totalMinutes: totalMinutes,
+            avgNapsPerDay: Double(totalNaps) / Double(avgDivisor),
+            avgMinutesPerDay: Double(totalMinutes) / Double(avgDivisor),
+            elapsedDays: elapsedDays
+        )
     }
 }

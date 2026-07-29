@@ -11,8 +11,12 @@ struct NapLog: Codable, Identifiable, Sendable {
 
 struct NapsPayload: Codable, Sendable {
     let localDate: String
+    let yesterdayLocalDate: String
+    let weekDates: [String]
     let childProfiles: [Profile]
     let naps: [NapLog]
+    let yesterdayNaps: [NapLog]
+    let weekNaps: [NapLog]
 }
 
 struct NapActionRequest: Encodable, Sendable {
