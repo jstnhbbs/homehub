@@ -242,7 +242,15 @@ final class HomeHubAPI: ObservableObject {
         )
     }
 
-    func createNightSleep(profileId: String, fellAsleepAt: Date, wokeUpAt: Date) async throws {
+    func startNightSleep(profileId: String) async throws {
+        let _: OkResponse = try await client.request(
+            "/api/mobile/v1/naps",
+            method: "POST",
+            body: NapActionRequest(action: "startNight", profileId: profileId)
+        )
+    }
+
+    func createNightSleep(profileId: String, fellAsleepAt: Date, wokeUpAt: Date?) async throws {
         let _: OkResponse = try await client.request(
             "/api/mobile/v1/naps",
             method: "POST",

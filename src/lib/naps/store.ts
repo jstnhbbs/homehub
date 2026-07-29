@@ -55,19 +55,18 @@ async function assertChildProfile(household: Household, profileId: string) {
   if (!child[0]) throw new Error("Child profile not found.");
 }
 
-async function assertNoActiveNap(
+async function assertNoActiveSleep(
   household: Household,
   profileId: string,
-  excludeNapId?: string,
+  excludeSleepId?: string,
 ) {
   const conditions = [
     eq(napLogs.householdId, household.id),
     eq(napLogs.profileId, profileId),
-    eq(napLogs.kind, "nap"),
     isNull(napLogs.endedAt),
   ];
-  if (excludeNapId) {
-    conditions.push(ne(napLogs.id, excludeNapId));
+  if (excludeSleepId) {
+    conditions.push(ne(napLogs.id, excludeSleepId));
   }
 
   const active = await db
@@ -75,7 +74,7 @@ async function assertNoActiveNap(
     .from(napLogs)
     .where(and(...conditions))
     .limit(1);
-  if (active[0]) throw new Error("This child already has an active nap.");
+  if (active[0]) throw new Error("This child already has sleep in progress.");
 }
 
 export async function fetchChildProfiles(householdId: string) {
@@ -89,6 +88,24 @@ export async function fetchChildProfiles(householdId: string) {
       ),
     )
     .orderBy(asc(profiles.sortOrder));
+}
+
+export async function startNap(household: Household, profileId: string) {
+  await assertChildProfile(household, profileId);
+  await assertNoActiveSleep(household, profileId);
+
+  const startedAt = new Date();
+  const id = randomUUID();
+  await db.insert(napLogs).values({
+    id,
+    householdId: household.id,
+    profileId,
+    kind: "nap",
+    localDate: localDateIn(household.timezone, startedAt),
+    startedAt,
+  });
+
+  return id;
 }
 
 export async function fetchSleepLogsInRange(
@@ -181,24 +198,6 @@ export async function fetchTodayNaps(household: Household) {
   };
 }
 
-export async function startNap(household: Household, profileId: string) {
-  await assertChildProfile(household, profileId);
-  await assertNoActiveNap(household, profileId);
-
-  const startedAt = new Date();
-  const id = randomUUID();
-  await db.insert(napLogs).values({
-    id,
-    householdId: household.id,
-    profileId,
-    kind: "nap",
-    localDate: localDateIn(household.timezone, startedAt),
-    startedAt,
-  });
-
-  return id;
-}
-
 export async function createManualNap(
   household: Household,
   profileId: string,
@@ -208,7 +207,7 @@ export async function createManualNap(
   await assertChildProfile(household, profileId);
   validateSleepTimes(startedAt, endedAt);
   if (!endedAt) {
-    await assertNoActiveNap(household, profileId);
+    await assertNoActiveSleep(household, profileId);
   }
 
   const id = randomUUID();
@@ -225,14 +224,35 @@ export async function createManualNap(
   return id;
 }
 
+export async function startNightSleep(household: Household, profileId: string) {
+  await assertChildProfile(household, profileId);
+  await assertNoActiveSleep(household, profileId);
+
+  const startedAt = new Date();
+  const id = randomUUID();
+  await db.insert(napLogs).values({
+    id,
+    householdId: household.id,
+    profileId,
+    kind: "night",
+    localDate: localDateIn(household.timezone, startedAt),
+    startedAt,
+  });
+
+  return id;
+}
+
 export async function createNightSleep(
   household: Household,
   profileId: string,
   fellAsleepAt: Date,
-  wokeUpAt: Date,
+  wokeUpAt: Date | null,
 ) {
   await assertChildProfile(household, profileId);
   validateSleepTimes(fellAsleepAt, wokeUpAt);
+  if (!wokeUpAt) {
+    await assertNoActiveSleep(household, profileId);
+  }
 
   const id = randomUUID();
   await db.insert(napLogs).values({
@@ -240,7 +260,10 @@ export async function createNightSleep(
     householdId: household.id,
     profileId,
     kind: "night",
-    localDate: localDateIn(household.timezone, wokeUpAt),
+    localDate: localDateIn(
+      household.timezone,
+      wokeUpAt ?? fellAsleepAt,
+    ),
     startedAt: fellAsleepAt,
     endedAt: wokeUpAt,
   });
@@ -263,18 +286,12 @@ export async function updateNapTimes(
     .limit(1);
   if (!existing[0]) throw new Error("Sleep entry not found.");
 
-  if (existing[0].kind === "night" && !endedAt) {
-    throw new Error("Night sleep requires a wake time.");
-  }
-
-  if (!endedAt && existing[0].kind === "nap") {
-    await assertNoActiveNap(household, existing[0].profileId, napId);
+  if (!endedAt) {
+    await assertNoActiveSleep(household, existing[0].profileId, napId);
   }
 
   const anchorDate =
-    existing[0].kind === "night" && endedAt
-      ? endedAt
-      : startedAt;
+    existing[0].kind === "night" && endedAt ? endedAt : startedAt;
 
   const updated = await db
     .update(napLogs)
@@ -305,15 +322,18 @@ export async function endNap(
       ),
     )
     .limit(1);
-  if (!existing[0]) throw new Error("Active nap not found.");
-  if (existing[0].kind !== "nap") {
-    throw new Error("Only naps can be ended from the timer.");
-  }
+  if (!existing[0]) throw new Error("Active sleep not found.");
   validateSleepTimes(existing[0].startedAt, endedAt);
 
   const updated = await db
     .update(napLogs)
-    .set({ endedAt, updatedAt: new Date() })
+    .set({
+      endedAt,
+      ...(existing[0].kind === "night"
+        ? { localDate: localDateIn(household.timezone, endedAt) }
+        : {}),
+      updatedAt: new Date(),
+    })
     .where(
       and(
         eq(napLogs.id, napId),
@@ -322,7 +342,7 @@ export async function endNap(
       ),
     )
     .returning({ id: napLogs.id });
-  if (!updated[0]) throw new Error("Active nap not found.");
+  if (!updated[0]) throw new Error("Active sleep not found.");
 }
 
 export async function endNapForProfile(household: Household, profileId: string) {
@@ -333,12 +353,11 @@ export async function endNapForProfile(household: Household, profileId: string) 
       and(
         eq(napLogs.householdId, household.id),
         eq(napLogs.profileId, profileId),
-        eq(napLogs.kind, "nap"),
         isNull(napLogs.endedAt),
       ),
     )
     .limit(1);
-  if (!active[0]) throw new Error("Active nap not found.");
+  if (!active[0]) throw new Error("Active sleep not found.");
   await endNap(household, active[0].id);
 }
 

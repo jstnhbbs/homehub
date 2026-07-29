@@ -7,6 +7,7 @@ import {
   fetchNapPageData,
   serializeNap,
   startNap,
+  startNightSleep,
 } from "@/lib/naps/store";
 import {
   handleMobileError,
@@ -44,6 +45,10 @@ export async function POST(request: Request) {
           profileId: z.string().uuid(),
         }),
         z.object({
+          action: z.literal("startNight"),
+          profileId: z.string().uuid(),
+        }),
+        z.object({
           action: z.literal("end"),
           profileId: z.string().uuid().optional(),
           napId: z.string().uuid().optional(),
@@ -58,13 +63,18 @@ export async function POST(request: Request) {
           action: z.literal("createNight"),
           profileId: z.string().uuid(),
           fellAsleepAt: isoDate,
-          wokeUpAt: isoDate,
+          wokeUpAt: isoDate.nullable().optional(),
         }),
       ])
       .parse(await parseJsonBody(request));
 
     if (input.action === "start") {
       const id = await startNap(household, input.profileId);
+      return mobileJson({ id });
+    }
+
+    if (input.action === "startNight") {
+      const id = await startNightSleep(household, input.profileId);
       return mobileJson({ id });
     }
 
@@ -83,7 +93,7 @@ export async function POST(request: Request) {
         household,
         input.profileId,
         new Date(input.fellAsleepAt),
-        new Date(input.wokeUpAt),
+        input.wokeUpAt ? new Date(input.wokeUpAt) : null,
       );
       return mobileJson({ id });
     }

@@ -1,14 +1,14 @@
 "use client";
 
 import { formatInTimeZone } from "date-fns-tz";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   createManualNapAction,
   createNightSleepAction,
   deleteNapAction,
   endNapAction,
-  endNapForProfileAction,
   startNapAction,
+  startNightSleepAction,
   updateNapAction,
 } from "@/app/(hub)/sleep/actions";
 import {
@@ -21,6 +21,7 @@ import {
   napDurationMinutes,
   sleepKindLabel,
 } from "@/lib/naps/helpers";
+import { sleepLogsOnDate } from "@/lib/naps/overlap";
 import type { SleepKind } from "@/db/schema";
 
 type ChildProfile = {
@@ -78,9 +79,8 @@ export function ManualNightSleepForm({
   const [fellAsleepAt, setFellAsleepAt] = useState(() =>
     defaultManualStartInput(timezone),
   );
-  const [wokeUpAt, setWokeUpAt] = useState(() =>
-    defaultManualStartInput(timezone),
-  );
+  const [wokeUpAt, setWokeUpAt] = useState("");
+  const [includeWakeTime, setIncludeWakeTime] = useState(false);
 
   return (
     <form action={createNightSleepAction} className="space-y-4">
@@ -116,22 +116,35 @@ export function ManualNightSleepForm({
             required
           />
         </label>
-        <label className="block space-y-1.5">
+        <label className="block space-y-1.5 sm:col-span-2">
           <span className="text-xs font-extrabold uppercase tracking-[0.14em] text-[var(--muted)]">
             Woke up
           </span>
-          <input
-            type="datetime-local"
-            name="wokeUpAt"
-            className="hub-input"
-            value={wokeUpAt}
-            onChange={(event) => setWokeUpAt(event.target.value)}
-            required
-          />
+          <label className="flex items-center gap-2 text-sm font-bold text-[var(--muted)]">
+            <input
+              type="checkbox"
+              checked={includeWakeTime}
+              onChange={(event) => setIncludeWakeTime(event.target.checked)}
+            />
+            Set wake time
+          </label>
+          {includeWakeTime ? (
+            <input
+              type="datetime-local"
+              name="wokeUpAt"
+              className="hub-input"
+              value={wokeUpAt}
+              onChange={(event) => setWokeUpAt(event.target.value)}
+            />
+          ) : (
+            <span className="text-xs font-bold text-[var(--muted)]">
+              Leave unset if they&apos;re still asleep. Add the wake time later.
+            </span>
+          )}
         </label>
       </div>
       <button type="submit" className="hub-button">
-        Add night sleep
+        {includeWakeTime ? "Add night sleep" : "Start bedtime"}
       </button>
     </form>
   );
@@ -206,6 +219,63 @@ export function ManualNapForm({
         Add nap
       </button>
     </form>
+  );
+}
+
+export function BedtimeChildRow({
+  profile,
+  activeNight,
+  timezone,
+}: {
+  profile: ChildProfile;
+  activeNight?: SleepItem;
+  timezone: string;
+}) {
+  const startedLabel = activeNight
+    ? formatInTimeZone(new Date(activeNight.startedAt), timezone, "h:mm a")
+    : null;
+
+  return (
+    <div className="rounded-2xl bg-[var(--tile)] p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <span
+            className="h-3 w-3 shrink-0 rounded-full"
+            style={profileColorStyle(profile.color)}
+          />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold">{profile.name}</p>
+            {activeNight ? (
+              <p className="text-xs font-bold text-[var(--muted)]">
+                In bed since {startedLabel} ·{" "}
+                <LiveDuration
+                  startedAt={activeNight.startedAt}
+                  endedAt={activeNight.endedAt}
+                />
+              </p>
+            ) : (
+              <p className="text-xs font-bold text-[var(--muted)]">
+                No active bedtime
+              </p>
+            )}
+          </div>
+        </div>
+
+        {activeNight ? (
+          <form action={endNapAction.bind(null, activeNight.id)}>
+            <button type="submit" className="hub-button secondary !min-h-9 !px-3 text-xs">
+              Log wake up
+            </button>
+          </form>
+        ) : (
+          <form action={startNightSleepAction.bind(null, profile.id)}>
+            <button type="submit" className="hub-button secondary !min-h-9 !px-3 text-xs">
+              Start bedtime
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -315,22 +385,59 @@ export function NapHistoryRow({
   timezone: string;
 }) {
   const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState(() =>
     toLocalDateTimeInput(new Date(nap.startedAt), timezone),
   );
   const [endedAt, setEndedAt] = useState(() =>
     nap.endedAt ? toLocalDateTimeInput(new Date(nap.endedAt), timezone) : "",
   );
+  const [includeEndTime, setIncludeEndTime] = useState(() => nap.endedAt != null);
+
+  useEffect(() => {
+    if (editing) return;
+    setStartedAt(toLocalDateTimeInput(new Date(nap.startedAt), timezone));
+    setEndedAt(
+      nap.endedAt ? toLocalDateTimeInput(new Date(nap.endedAt), timezone) : "",
+    );
+    setIncludeEndTime(nap.endedAt != null);
+    setSaveError(null);
+  }, [nap.startedAt, nap.endedAt, nap.id, timezone, editing]);
 
   function beginEditing() {
     setStartedAt(toLocalDateTimeInput(new Date(nap.startedAt), timezone));
     setEndedAt(
       nap.endedAt ? toLocalDateTimeInput(new Date(nap.endedAt), timezone) : "",
     );
+    setIncludeEndTime(nap.endedAt != null);
+    setSaveError(null);
     setEditing(true);
   }
 
+  async function handleSave(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const formData = new FormData(event.currentTarget);
+      if (!includeEndTime) {
+        formData.delete("endedAt");
+      }
+      await updateNapAction(nap.id, formData);
+      setEditing(false);
+    } catch (error) {
+      setSaveError(
+        error instanceof Error ? error.message : "Could not save sleep entry.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const kind = nap.kind ?? "nap";
+  const startFieldLabel = kind === "night" ? "Fell asleep" : "Start time";
+  const endFieldLabel = kind === "night" ? "Woke up" : "End time";
   const startedLabel = formatInTimeZone(
     new Date(nap.startedAt),
     timezone,
@@ -339,7 +446,7 @@ export function NapHistoryRow({
   const endedLabel = nap.endedAt
     ? formatInTimeZone(new Date(nap.endedAt), timezone, "h:mm a")
     : kind === "night"
-      ? "Unknown"
+      ? "Still asleep"
       : "In progress";
 
   return (
@@ -364,10 +471,10 @@ export function NapHistoryRow({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {!editing && nap.endedAt == null && kind === "nap" && (
-            <form action={endNapForProfileAction.bind(null, nap.profileId)}>
+          {!editing && nap.endedAt == null && (
+            <form action={endNapAction.bind(null, nap.id)}>
               <button type="submit" className="hub-button secondary !min-h-8 !px-2 text-xs">
-                End
+                {kind === "night" ? "Wake up" : "End"}
               </button>
             </form>
           )}
@@ -395,13 +502,13 @@ export function NapHistoryRow({
 
       {editing && (
         <form
-          action={updateNapAction.bind(null, nap.id)}
+          onSubmit={handleSave}
           className="mt-4 space-y-3 border-t border-[var(--line)] pt-4"
         >
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block space-y-1.5">
               <span className="text-xs font-extrabold uppercase tracking-[0.14em] text-[var(--muted)]">
-                Start time
+                {startFieldLabel}
               </span>
               <input
                 type="datetime-local"
@@ -412,33 +519,113 @@ export function NapHistoryRow({
                 required
               />
             </label>
-            <label className="block space-y-1.5">
-              <span className="text-xs font-extrabold uppercase tracking-[0.14em] text-[var(--muted)]">
-                End time
-              </span>
-              <input
-                type="datetime-local"
-                name="endedAt"
-                className="hub-input"
-                value={endedAt}
-                onChange={(event) => setEndedAt(event.target.value)}
-              />
-            </label>
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-[0.14em] text-[var(--muted)]">
+                <input
+                  type="checkbox"
+                  checked={includeEndTime}
+                  onChange={(event) => setIncludeEndTime(event.target.checked)}
+                />
+                Set {endFieldLabel.toLowerCase()}
+              </label>
+              {includeEndTime ? (
+                <input
+                  type="datetime-local"
+                  name="endedAt"
+                  className="hub-input"
+                  value={endedAt}
+                  onChange={(event) => setEndedAt(event.target.value)}
+                />
+              ) : (
+                <p className="text-xs font-bold text-[var(--muted)]">
+                  Leave unset if still asleep or in progress.
+                </p>
+              )}
+            </div>
           </div>
+          {saveError ? (
+            <p className="text-xs font-bold text-[var(--coral)]">{saveError}</p>
+          ) : null}
           <div className="flex gap-2">
-            <button type="submit" className="hub-button secondary !min-h-9 !px-4 text-xs">
-              Save
+            <button
+              type="submit"
+              className="hub-button secondary !min-h-9 !px-4 text-xs"
+              disabled={saving}
+            >
+              {saving ? "Saving…" : "Save"}
             </button>
             <button
               type="button"
               className="hub-button secondary !min-h-9 !px-4 text-xs"
               onClick={() => setEditing(false)}
+              disabled={saving}
             >
               Cancel
             </button>
           </div>
         </form>
       )}
+    </div>
+  );
+}
+
+type SleepDayHistoryProps = {
+  childProfiles: ChildProfile[];
+  logs: SleepItem[];
+  localDate: string;
+  timezone: string;
+  title?: string;
+};
+
+export function SleepDayHistorySection({
+  childProfiles,
+  logs,
+  localDate,
+  timezone,
+  title = "Logged sleep",
+}: SleepDayHistoryProps) {
+  const dayLogs = useMemo(() => {
+    const records = logs.map((log) => ({
+      ...log,
+      kind: log.kind ?? "nap",
+      startedAt: new Date(log.startedAt),
+      endedAt: log.endedAt ? new Date(log.endedAt) : null,
+    }));
+    return sleepLogsOnDate(records, localDate, timezone).sort(
+      (left, right) => left.startedAt.getTime() - right.startedAt.getTime(),
+    );
+  }, [logs, localDate, timezone]);
+
+  if (!dayLogs.length) return null;
+
+  return (
+    <div className="hub-card p-5 max-md:p-4">
+      <h3 className="font-display text-2xl font-semibold">{title}</h3>
+      <p className="mt-2 text-sm text-[var(--muted)]">
+        Tap Edit on any entry to change start or end times after logging.
+      </p>
+      <div className="mt-4 space-y-2">
+        {dayLogs.map((log) => {
+          const profile = childProfiles.find((item) => item.id === log.profileId);
+          if (!profile) return null;
+          return (
+            <NapHistoryRow
+              key={log.id}
+              nap={{
+                id: log.id,
+                profileId: log.profileId,
+                kind: log.kind,
+                localDate: log.localDate,
+                startedAt: log.startedAt.toISOString(),
+                endedAt: log.endedAt?.toISOString() ?? null,
+              }}
+              profileName={profile.name}
+              profileColor={profile.color}
+              timezone={timezone}
+            />
+          );
+        })}
+      </div>
     </div>
   );
 }

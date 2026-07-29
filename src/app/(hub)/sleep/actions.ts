@@ -10,6 +10,7 @@ import {
   endNap,
   endNapForProfile,
   startNap,
+  startNightSleep,
   updateNapTimes,
 } from "@/lib/naps/store";
 import { requireHousehold } from "@/lib/household";
@@ -64,21 +65,29 @@ export async function createManualNapAction(formData: FormData) {
   revalidatePath("/", "layout");
 }
 
+export async function startNightSleepAction(profileId: string) {
+  const household = await requireHousehold();
+  await startNightSleep(household, profileIdSchema.parse(profileId));
+  revalidatePath("/", "layout");
+}
+
 export async function createNightSleepAction(formData: FormData) {
   const household = await requireHousehold();
   const profileId = profileIdSchema.parse(text(formData, "profileId"));
   const fellAsleepRaw = text(formData, "fellAsleepAt");
   const wokeUpRaw = text(formData, "wokeUpAt");
 
-  if (!fellAsleepRaw || !wokeUpRaw) {
-    throw new Error("Both sleep and wake times are required.");
+  if (!fellAsleepRaw) {
+    throw new Error("Fell asleep time is required.");
   }
 
   await createNightSleep(
     household,
     profileId,
     parseLocalDateTimeInput(fellAsleepRaw, household.timezone),
-    parseLocalDateTimeInput(wokeUpRaw, household.timezone),
+    wokeUpRaw
+      ? parseLocalDateTimeInput(wokeUpRaw, household.timezone)
+      : null,
   );
   revalidatePath("/", "layout");
 }

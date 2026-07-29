@@ -27,7 +27,9 @@ struct NapsView: View {
                     } else if let payload {
                         logHeader
                         quickLogSection(payload)
+                        bedtimeSection(payload)
                         manualEntrySection(payload)
+                        todayHistorySection(payload)
                         patternsSection(payload)
                     }
                 }
@@ -76,12 +78,54 @@ struct NapsView: View {
                             profile: profile,
                             activeNap: NapHelpers.activeNap(for: profile.id, in: payload.naps),
                             timezone: TimeZone(identifier: appState.household?.timezone ?? "") ?? .current,
-                            now: now
+                            now: now,
+                            emptyLabel: "No active nap",
+                            activeLabel: "Asleep since",
+                            startLabel: "Start nap",
+                            endLabel: "End nap"
                         ) {
                             await startNap(profileId: profile.id)
                         } endAction: {
                             if let nap = NapHelpers.activeNap(for: profile.id, in: payload.naps) {
                                 await endNap(napId: nap.id)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func bedtimeSection(_ payload: NapsPayload) -> some View {
+        HubCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Bedtime", systemImage: "bed.double.fill")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(HubTheme.sage)
+
+                Text("Start bedtime when they fall asleep, then log wake up in the morning.")
+                    .font(.footnote.weight(.bold))
+                    .foregroundStyle(HubTheme.muted)
+
+                if payload.childProfiles.isEmpty {
+                    EmptyStateView(text: "Add a child profile in Settings to start logging sleep.")
+                } else {
+                    ForEach(payload.childProfiles) { profile in
+                        NapChildRowView(
+                            profile: profile,
+                            activeNap: NapHelpers.activeNight(for: profile.id, in: payload.weekLogs),
+                            timezone: TimeZone(identifier: appState.household?.timezone ?? "") ?? .current,
+                            now: now,
+                            emptyLabel: "No active bedtime",
+                            activeLabel: "In bed since",
+                            startLabel: "Start bedtime",
+                            endLabel: "Log wake up"
+                        ) {
+                            await startNightSleep(profileId: profile.id)
+                        } endAction: {
+                            if let night = NapHelpers.activeNight(for: profile.id, in: payload.weekLogs) {
+                                await endNap(napId: night.id)
                             }
                         }
                     }
@@ -106,6 +150,48 @@ struct NapsView: View {
                     timezone: TimeZone(identifier: appState.household?.timezone ?? "") ?? .current
                 ) { profileId, fellAsleepAt, wokeUpAt in
                     await createNightSleep(profileId: profileId, fellAsleepAt: fellAsleepAt, wokeUpAt: wokeUpAt)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func todayHistorySection(_ payload: NapsPayload) -> some View {
+        let todayLogs = NapHelpers.logsForDate(
+            profileId: nil,
+            in: payload.weekLogs,
+            localDate: payload.localDate,
+            timezone: timezone,
+            now: now
+        ).sorted { $0.startedAt < $1.startedAt }
+
+        if todayLogs.isEmpty {
+            EmptyView()
+        } else {
+            HubCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Today's sleep")
+                        .font(.title3.weight(.semibold))
+                    Text("Tap Edit on any entry to change start or end times after logging.")
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(HubTheme.muted)
+
+                    ForEach(todayLogs) { nap in
+                        if let profile = payload.childProfiles.first(where: { $0.id == nap.profileId }) {
+                            NapHistoryRowView(
+                                nap: nap,
+                                profile: profile,
+                                timezone: timezone,
+                                now: now,
+                                endAction: nap.endedAt == nil ? { await endNap(napId: nap.id) } : nil,
+                                saveAction: { startedAt, endedAt in
+                                    await updateNap(id: nap.id, startedAt: startedAt, endedAt: endedAt)
+                                },
+                                deleteAction: { await deleteNap(id: nap.id) }
+                            )
+                            .id("\(nap.id)-\(nap.startedAt.timeIntervalSince1970)-\(nap.endedAt?.timeIntervalSince1970 ?? 0)")
+                        }
+                    }
                 }
             }
         }
@@ -347,12 +433,13 @@ struct NapsView: View {
                                     profile: profile,
                                     timezone: timezone,
                                     now: now,
-                                    endAction: selectedDate == payload.localDate && nap.endedAt == nil && nap.kind == "nap" ? { await endNap(napId: nap.id) } : nil,
+                                    endAction: nap.endedAt == nil ? { await endNap(napId: nap.id) } : nil,
                                     saveAction: { startedAt, endedAt in
                                         await updateNap(id: nap.id, startedAt: startedAt, endedAt: endedAt)
                                     },
                                     deleteAction: { await deleteNap(id: nap.id) }
                                 )
+                                .id("\(nap.id)-\(nap.startedAt.timeIntervalSince1970)-\(nap.endedAt?.timeIntervalSince1970 ?? 0)")
                             }
                         }
                     }
@@ -407,7 +494,17 @@ struct NapsView: View {
         }
     }
 
-    private func createNightSleep(profileId: String, fellAsleepAt: Date, wokeUpAt: Date) async {
+    private func startNightSleep(profileId: String) async {
+        do {
+            try await appState.api.startNightSleep(profileId: profileId)
+            await appState.refreshDashboard()
+            await load()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func createNightSleep(profileId: String, fellAsleepAt: Date, wokeUpAt: Date?) async {
         do {
             try await appState.api.createNightSleep(profileId: profileId, fellAsleepAt: fellAsleepAt, wokeUpAt: wokeUpAt)
             await appState.refreshDashboard()
@@ -525,22 +622,23 @@ private struct ManualNapFormView: View {
 private struct ManualNightSleepFormView: View {
     let childProfiles: [Profile]
     let timezone: TimeZone
-    let onSubmit: (String, Date, Date) async -> Void
+    let onSubmit: (String, Date, Date?) async -> Void
 
     @State private var selectedProfileId: String
     @State private var fellAsleepAt: Date
     @State private var wokeUpAt: Date
+    @State private var includeWakeTime = false
 
     init(
         childProfiles: [Profile],
         timezone: TimeZone,
-        onSubmit: @escaping (String, Date, Date) async -> Void
+        onSubmit: @escaping (String, Date, Date?) async -> Void
     ) {
         self.childProfiles = childProfiles
         self.timezone = timezone
         self.onSubmit = onSubmit
         _selectedProfileId = State(initialValue: childProfiles.first?.id ?? "")
-        _fellAsleepAt = State(initialValue: Date.now.addingTimeInterval(-8 * 3600))
+        _fellAsleepAt = State(initialValue: Date.now)
         _wokeUpAt = State(initialValue: Date.now)
     }
 
@@ -566,15 +664,27 @@ private struct ManualNightSleepFormView: View {
                     displayedComponents: [.date, .hourAndMinute]
                 )
 
-                DatePicker(
-                    "Woke up",
-                    selection: $wokeUpAt,
-                    displayedComponents: [.date, .hourAndMinute]
-                )
+                Toggle("Set wake time", isOn: $includeWakeTime)
 
-                Button("Add night sleep") {
+                if includeWakeTime {
+                    DatePicker(
+                        "Woke up",
+                        selection: $wokeUpAt,
+                        displayedComponents: [.date, .hourAndMinute]
+                    )
+                } else {
+                    Text("Leave unset if they're still asleep. Add the wake time later.")
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(HubTheme.muted)
+                }
+
+                Button(includeWakeTime ? "Add night sleep" : "Start bedtime") {
                     Task {
-                        await onSubmit(selectedProfileId, fellAsleepAt, wokeUpAt)
+                        await onSubmit(
+                            selectedProfileId,
+                            fellAsleepAt,
+                            includeWakeTime ? wokeUpAt : nil
+                        )
                     }
                 }
                 .buttonStyle(.borderedProminent)
@@ -590,8 +700,36 @@ private struct NapChildRowView: View {
     let activeNap: NapLog?
     let timezone: TimeZone
     let now: Date
+    let emptyLabel: String
+    let activeLabel: String
+    let startLabel: String
+    let endLabel: String
     let startAction: () async -> Void
     let endAction: () async -> Void
+
+    init(
+        profile: Profile,
+        activeNap: NapLog?,
+        timezone: TimeZone,
+        now: Date,
+        emptyLabel: String = "No active nap",
+        activeLabel: String = "Asleep since",
+        startLabel: String = "Start nap",
+        endLabel: String = "End nap",
+        startAction: @escaping () async -> Void,
+        endAction: @escaping () async -> Void
+    ) {
+        self.profile = profile
+        self.activeNap = activeNap
+        self.timezone = timezone
+        self.now = now
+        self.emptyLabel = emptyLabel
+        self.activeLabel = activeLabel
+        self.startLabel = startLabel
+        self.endLabel = endLabel
+        self.startAction = startAction
+        self.endAction = endAction
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -603,11 +741,11 @@ private struct NapChildRowView: View {
                 Text(profile.name)
                     .font(.subheadline.weight(.bold))
                 if let activeNap {
-                    Text("Asleep since \(DateHelpers.timeString(activeNap.startedAt, timezone: timezone)) · \(durationLabel(for: activeNap))")
+                    Text("\(activeLabel) \(DateHelpers.timeString(activeNap.startedAt, timezone: timezone)) · \(durationLabel(for: activeNap))")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(HubTheme.muted)
                 } else {
-                    Text("No active nap")
+                    Text(emptyLabel)
                         .font(.caption.weight(.bold))
                         .foregroundStyle(HubTheme.muted)
                 }
@@ -616,13 +754,13 @@ private struct NapChildRowView: View {
             Spacer()
 
             if activeNap != nil {
-                Button("End nap") {
+                Button(endLabel) {
                     Task { await endAction() }
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
             } else {
-                Button("Start nap") {
+                Button(startLabel) {
                     Task { await startAction() }
                 }
                 .buttonStyle(.bordered)
@@ -691,7 +829,7 @@ private struct NapHistoryRowView: View {
                     Text(profile.name)
                         .font(.subheadline.weight(.bold))
                     if !isEditing {
-                        Text("\(DateHelpers.timeString(nap.startedAt, timezone: timezone)) – \(endLabel) · \(durationLabel)")
+                        Text("\(sleepKindLabel) · \(DateHelpers.timeString(nap.startedAt, timezone: timezone)) – \(endLabel) · \(durationLabel)")
                             .font(.caption.weight(.bold))
                             .foregroundStyle(HubTheme.muted)
                     }
@@ -701,7 +839,7 @@ private struct NapHistoryRowView: View {
 
                 if !isEditing {
                     if let endAction {
-                        Button("End") {
+                        Button(nap.kind == "night" ? "Wake up" : "End") {
                             Task { await endAction() }
                         }
                         .buttonStyle(.bordered)
@@ -726,22 +864,26 @@ private struct NapHistoryRowView: View {
 
             if isEditing {
                 DatePicker(
-                    "Start time",
+                    nap.kind == "night" ? "Fell asleep" : "Start time",
                     selection: $startedAt,
                     displayedComponents: [.date, .hourAndMinute]
                 )
 
-                Toggle("Set end time", isOn: $includeEndTime)
+                Toggle(nap.kind == "night" ? "Set wake time" : "Set end time", isOn: $includeEndTime)
 
                 if includeEndTime {
                     DatePicker(
-                        "End time",
+                        nap.kind == "night" ? "Woke up" : "End time",
                         selection: Binding(
                             get: { endedAt ?? startedAt.addingTimeInterval(3600) },
                             set: { endedAt = $0 }
                         ),
                         displayedComponents: [.date, .hourAndMinute]
                     )
+                } else {
+                    Text("Leave unset if still asleep or in progress.")
+                        .font(.footnote.weight(.bold))
+                        .foregroundStyle(HubTheme.muted)
                 }
 
                 HStack {
@@ -766,8 +908,14 @@ private struct NapHistoryRowView: View {
         .padding(.vertical, 8)
     }
 
+    private var sleepKindLabel: String {
+        nap.kind == "night" ? "Night" : "Nap"
+    }
+
     private var endLabel: String {
-        guard let endedAt = nap.endedAt else { return "In progress" }
+        guard let endedAt = nap.endedAt else {
+            return nap.kind == "night" ? "Still asleep" : "In progress"
+        }
         return DateHelpers.timeString(endedAt, timezone: timezone)
     }
 

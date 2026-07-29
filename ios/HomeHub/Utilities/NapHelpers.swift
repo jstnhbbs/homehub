@@ -39,6 +39,10 @@ enum NapHelpers {
         naps.first { $0.profileId == profileId && $0.kind == "nap" && $0.endedAt == nil }
     }
 
+    static func activeNight(for profileId: String, in logs: [NapLog]) -> NapLog? {
+        logs.first { $0.profileId == profileId && $0.kind == "night" && $0.endedAt == nil }
+    }
+
     static func sleepOverlapsLocalDate(_ log: NapLog, localDate: String, timezone: TimeZone, now: Date = .now) -> Bool {
         guard let dayStart = DateHelpers.dateFromLocalDate(localDate, timezone: timezone),
               let dayEnd = Calendar(identifier: .gregorian).date(byAdding: .day, value: 1, to: dayStart)?.addingTimeInterval(-0.001) else {
