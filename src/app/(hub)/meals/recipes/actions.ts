@@ -77,7 +77,7 @@ export async function addRecipe(formData: FormData) {
     ...serializeRecipeFields(input),
   });
   revalidatePath("/", "layout");
-  redirect(`/recipes/${id}`);
+  redirect(`/meals/recipes/${id}`);
 }
 
 export async function importRecipe(formData: FormData) {
@@ -107,7 +107,7 @@ export async function importRecipe(formData: FormData) {
     ...serializeRecipeFields(imported),
   });
   revalidatePath("/", "layout");
-  redirect(`/recipes/${id}`);
+  redirect(`/meals/recipes/${id}`);
 }
 
 export async function updateRecipe(recipeId: string, formData: FormData) {
@@ -125,7 +125,7 @@ export async function updateRecipe(recipeId: string, formData: FormData) {
     .returning({ id: recipes.id });
   if (!updated[0]) throw new Error("Recipe not found.");
   revalidatePath("/", "layout");
-  redirect(`/recipes/${id}`);
+  redirect(`/meals/recipes/${id}`);
 }
 
 export async function deleteRecipe(recipeId: string) {
@@ -137,5 +137,5 @@ export async function deleteRecipe(recipeId: string) {
     .returning({ id: recipes.id });
   if (!deleted[0]) throw new Error("Recipe not found.");
   revalidatePath("/", "layout");
-  redirect("/recipes");
+  redirect("/meals/recipes");
 }

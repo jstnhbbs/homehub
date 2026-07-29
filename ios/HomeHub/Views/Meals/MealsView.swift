@@ -1,12 +1,49 @@
 import SwiftUI
 
+private enum MealHubSection: String, CaseIterable, Identifiable {
+    case week
+    case recipes
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .week: "Weekly plan"
+        case .recipes: "Recipes"
+        }
+    }
+}
+
 struct MealsView: View {
     @EnvironmentObject private var appState: AppState
     @StateObject private var viewModel = MealsViewModel()
+    @State private var section: MealHubSection = .week
 
     private let mealSlots: [MealSlot] = [.breakfast, .lunch, .dinner]
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            sectionPicker
+
+            switch section {
+            case .week:
+                weekContent
+            case .recipes:
+                RecipesView()
+            }
+        }
+    }
+
+    private var sectionPicker: some View {
+        Picker("Meals section", selection: $section) {
+            ForEach(MealHubSection.allCases) { item in
+                Text(item.label).tag(item)
+            }
+        }
+        .pickerStyle(.segmented)
+    }
+
+    private var weekContent: some View {
         VStack(alignment: .leading, spacing: 16) {
             header
             if let error = viewModel.errorMessage {

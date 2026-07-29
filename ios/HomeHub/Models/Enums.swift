@@ -59,7 +59,6 @@ enum HubDestination: String, Hashable, CaseIterable, Identifiable {
     case chores
     case meals
     case snacks
-    case recipes
     case profile
     case settings
 
@@ -73,7 +72,6 @@ enum HubDestination: String, Hashable, CaseIterable, Identifiable {
         case .chores: "Chores"
         case .meals: "Meals"
         case .snacks: "Snacks"
-        case .recipes: "Recipes"
         case .profile: "Profile"
         case .settings: "Settings"
         }
@@ -87,7 +85,6 @@ enum HubDestination: String, Hashable, CaseIterable, Identifiable {
         case .chores: "checkmark.square.fill"
         case .meals: "fork.knife"
         case .snacks: "carrot.fill"
-        case .recipes: "book.fill"
         case .profile: "person.crop.circle"
         case .settings: "gearshape.fill"
         }

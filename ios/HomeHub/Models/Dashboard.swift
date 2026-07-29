@@ -11,4 +11,5 @@ struct DashboardData: Codable, Sendable {
     var calendarStatus: CalendarSyncStatus
     var snackOptions: [String]
     var snackEaten: [String]
+    var naps: [NapLog]
 }

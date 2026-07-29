@@ -20,6 +20,7 @@ import { calendarSyncStatus } from "@/lib/calendar/connections";
 import { isChoreDueOnDate } from "@/lib/chores";
 import { localDateIn, weekKey } from "@/lib/dates";
 import { parseSnackOptions } from "@/lib/meals/snacks";
+import { fetchNapsForDate, serializeNap } from "@/lib/naps/store";
 import type { getCurrentHousehold } from "@/lib/household";
 import { serializeHousehold } from "@/lib/mobile/http";
 
@@ -41,6 +42,7 @@ export async function buildDashboardPayload(household: Household) {
     eventRows,
     connectionRows,
     snackDone,
+    todayNaps,
   ] = await Promise.all([
     db
       .select()
@@ -121,6 +123,7 @@ export async function buildDashboardPayload(household: Household) {
           eq(snackCompletions.localDate, localDate),
         ),
       ),
+    fetchNapsForDate(household, localDate),
   ]);
 
   const doneSteps = new Set(routineDone.map((item) => item.stepId));
@@ -197,6 +200,7 @@ export async function buildDashboardPayload(household: Household) {
     },
     snackOptions: parseSnackOptions(household.snackOptions),
     snackEaten: snackDone.map((item) => item.snackLabel),
+    naps: todayNaps.map(serializeNap),
   };
 }
 

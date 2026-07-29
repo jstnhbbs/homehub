@@ -93,6 +93,8 @@ struct DashboardView: View {
                         ) {
                             SnacksDashboardPanel(dashboard: dashboard)
                         }
+
+                        NapsDashboardPanel(dashboard: dashboard, height: rowHeight)
                     }
                 } else {
                     ProgressView("Loading today…")
@@ -109,6 +111,10 @@ struct DashboardView: View {
             if appState.dashboard == nil {
                 await appState.refreshDashboard()
             }
+        }
+        .sheet(isPresented: $appState.showNapsSheet) {
+            NapsView()
+                .environmentObject(appState)
         }
     }
 
@@ -338,6 +344,117 @@ private struct MealSlotRow: View {
 }
 
 // MARK: - Snacks
+
+private struct NapsDashboardPanel: View {
+    @EnvironmentObject private var appState: AppState
+    let dashboard: DashboardData
+    let height: CGFloat
+
+    @State private var now = Date.now
+    private let timer = Timer.publish(every: 30, on: .main, in: .common).autoconnect()
+
+    private var childProfiles: [Profile] {
+        NapHelpers.childProfiles(from: dashboard.profiles)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            CardTitleView(systemImage: "moon.fill", title: "Naps") {
+                appState.showNapsSheet = true
+            }
+            if childProfiles.isEmpty {
+                EmptyStateView(
+                    text: "Add a child profile to log naps.",
+                    action: appState.canManageHousehold ? { appState.selectedDestination = .settings } : nil
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    VStack(spacing: 8) {
+                        ForEach(childProfiles) { profile in
+                            DashboardNapRow(
+                                profile: profile,
+                                activeNap: NapHelpers.activeNap(for: profile.id, in: dashboard.naps),
+                                timezone: TimeZone(identifier: dashboard.household.timezone) ?? .current,
+                                now: now
+                            )
+                        }
+                    }
+                }
+                .scrollIndicators(.hidden)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: height, maxHeight: height, alignment: .topLeading)
+        .background(HubTheme.tile)
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(HubTheme.line, lineWidth: 1)
+        )
+        .onReceive(timer) { date in
+            now = date
+        }
+    }
+}
+
+private struct DashboardNapRow: View {
+    @EnvironmentObject private var appState: AppState
+    let profile: Profile
+    let activeNap: NapLog?
+    let timezone: TimeZone
+    let now: Date
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(HubTheme.profileColor(profile.color))
+                .frame(width: 10, height: 10)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(profile.name)
+                    .font(.subheadline.weight(.bold))
+                    .lineLimit(1)
+                Text(statusText)
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(HubTheme.muted)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            if activeNap != nil {
+                Button("End") {
+                    Task {
+                        if let napId = activeNap?.id {
+                            try? await appState.api.endNap(napId: napId)
+                            await appState.refreshDashboard()
+                        }
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+            } else {
+                Button("Start") {
+                    Task {
+                        try? await appState.api.startNap(profileId: profile.id)
+                        await appState.refreshDashboard()
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(HubTheme.tileQuiet)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private var statusText: String {
+        guard let activeNap else { return "No active nap" }
+        let minutes = NapHelpers.durationMinutes(startedAt: activeNap.startedAt, endedAt: nil, now: now)
+        let started = DateHelpers.timeString(activeNap.startedAt, timezone: timezone)
+        return "Asleep since \(started) · \(NapHelpers.formatDuration(minutes: minutes))"
+    }
+}
 
 private struct SnacksDashboardPanel: View {
     @EnvironmentObject private var appState: AppState

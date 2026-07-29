@@ -31,8 +31,6 @@ struct HubView: View {
             MealsView()
         case .snacks:
             SnacksView()
-        case .recipes:
-            RecipesView()
         case .profile:
             MyProfileView()
         case .settings:

@@ -2,6 +2,20 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
+  async redirects() {
+    return [
+      {
+        source: "/recipes",
+        destination: "/meals/recipes",
+        permanent: true,
+      },
+      {
+        source: "/recipes/:recipeId",
+        destination: "/meals/recipes/:recipeId",
+        permanent: true,
+      },
+    ];
+  },
   images: {
     remotePatterns: [
       {

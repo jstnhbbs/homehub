@@ -61,7 +61,7 @@ export function MealInput({
         </div>
         {initialRecipeId && initialValue && (
           <Link
-            href={`/recipes/${initialRecipeId}`}
+            href={`/meals/recipes/${initialRecipeId}`}
             className="block truncate text-[11px] font-bold text-[var(--sage)]"
           >
             View recipe
@@ -133,7 +133,7 @@ export function MealInput({
       </div>
       {initialRecipeId && initialValue && (
         <Link
-          href={`/recipes/${initialRecipeId}`}
+          href={`/meals/recipes/${initialRecipeId}`}
           className="block truncate text-[11px] font-bold text-[var(--sage)]"
         >
           View recipe

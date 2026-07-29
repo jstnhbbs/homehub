@@ -6,6 +6,7 @@ import {
   CheckSquare2,
   ClipboardCheck,
   Cookie,
+  Moon,
   Soup,
 } from "lucide-react";
 import Link from "next/link";
@@ -13,6 +14,7 @@ import { toggleChore, toggleRoutineStep, toggleSnack } from "@/app/actions";
 import { calendarSyncStatus } from "@/lib/calendar/connections";
 import { CalendarSync } from "@/components/calendar-sync";
 import { CheckItem } from "@/components/check-item";
+import { NapChildRow } from "@/components/nap-controls";
 import { TodaySchedule } from "@/components/today-schedule";
 import { db } from "@/db/client";
 import {
@@ -35,6 +37,7 @@ import { expandIcalEvent } from "@/lib/caldav/ical";
 import { localDateIn, weekKey } from "@/lib/dates";
 import { isChoreDueOnDate } from "@/lib/chores";
 import { parseSnackOptions, sortSnackOptions } from "@/lib/meals/snacks";
+import { fetchTodayNaps } from "@/lib/naps/store";
 import { requireHousehold } from "@/lib/household";
 import { canManageHousehold } from "@/lib/household-roles";
 
@@ -55,6 +58,7 @@ export default async function DashboardPage() {
     eventRows,
     connectionRows,
     snackDone,
+    napData,
   ] = await Promise.all([
     db
       .select()
@@ -138,6 +142,7 @@ export default async function DashboardPage() {
           eq(snackCompletions.localDate, localDate),
         ),
       ),
+    fetchTodayNaps(household),
   ]);
 
   const doneSteps = new Set(routineDone.map((item) => item.stepId));
@@ -187,6 +192,12 @@ export default async function DashboardPage() {
   const snackItems = sortSnackOptions(
     parseSnackOptions(household.snackOptions),
     snackEaten,
+  );
+  const childProfiles = napData.childProfiles;
+  const activeNaps = new Map(
+    napData.naps
+      .filter((nap) => !nap.endedAt)
+      .map((nap) => [nap.profileId, nap]),
   );
 
   return (
@@ -301,7 +312,7 @@ export default async function DashboardPage() {
         </section>
         </div>
 
-        <div className="grid grid-cols-2 gap-5 max-md:grid-cols-1 max-md:gap-3">
+        <div className="grid grid-cols-3 gap-5 max-md:grid-cols-1 max-md:gap-3">
         <section className="hub-card min-h-[245px] bg-[var(--sun-soft)]/50 p-5 max-md:min-h-0 max-md:p-4">
           <CardTitle icon={Soup} title="Today’s Meals" href="/meals" />
           <div className="mt-5 space-y-3">
@@ -331,7 +342,7 @@ export default async function DashboardPage() {
                         >
                           {index === 0 && meal?.recipeId ? (
                             <Link
-                              href={`/recipes/${meal.recipeId}`}
+                              href={`/meals/recipes/${meal.recipeId}`}
                               className="hover:text-[var(--sage)]"
                             >
                               {item}
@@ -376,6 +387,37 @@ export default async function DashboardPage() {
               {snackEaten.size} of {snackItems.length} eaten today
             </p>
           )}
+        </section>
+
+        <section className="hub-card min-h-[245px] p-5 max-md:min-h-0 max-md:p-4">
+          <CardTitle icon={Moon} title="Naps" href="/naps" />
+          <div className="scrollbar-none mt-4 max-h-[180px] space-y-2 overflow-auto">
+            {childProfiles.length ? (
+              childProfiles.map((profile) => {
+                const activeNap = activeNaps.get(profile.id);
+                return (
+                  <NapChildRow
+                    key={profile.id}
+                    profile={profile}
+                    activeNap={
+                      activeNap
+                        ? {
+                            id: activeNap.id,
+                            profileId: activeNap.profileId,
+                            startedAt: activeNap.startedAt.toISOString(),
+                            endedAt: activeNap.endedAt?.toISOString() ?? null,
+                          }
+                        : undefined
+                    }
+                    timezone={household.timezone}
+                    compact
+                  />
+                );
+              })
+            ) : (
+              <EmptyState text="Add a child profile to log naps." href="/settings" />
+            )}
+          </div>
         </section>
         </div>
       </div>

@@ -32,7 +32,7 @@ export default async function RecipeDetailPage({
   return (
     <div className="mx-auto max-w-4xl pb-10">
       <Link
-        href="/recipes"
+        href="/meals/recipes"
         className="inline-flex items-center gap-2 text-sm font-bold text-[var(--muted)]"
       >
         <ArrowLeft size={16} /> Back to recipes

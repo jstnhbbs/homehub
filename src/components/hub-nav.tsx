@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  BookOpen,
   CalendarDays,
   CheckSquare2,
   ClipboardCheck,
@@ -21,7 +20,6 @@ const items = [
   { href: "/chores", label: "Chores", icon: CheckSquare2 },
   { href: "/meals", label: "Meals", icon: Soup },
   { href: "/snacks", label: "Snacks", icon: Cookie },
-  { href: "/recipes", label: "Recipes", icon: BookOpen },
   { href: "/settings", label: "Settings", icon: Settings, parentOnly: true },
 ] as const;
 

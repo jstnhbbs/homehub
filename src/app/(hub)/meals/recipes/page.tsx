@@ -36,7 +36,7 @@ export default async function RecipesPage() {
             recipeList.map((recipe) => (
               <Link
                 key={recipe.id}
-                href={`/recipes/${recipe.id}`}
+                href={`/meals/recipes/${recipe.id}`}
                 className="hub-card overflow-hidden transition hover:-translate-y-0.5"
               >
                 {recipe.imageUrl ? (

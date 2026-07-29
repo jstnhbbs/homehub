@@ -257,6 +257,28 @@ export const snackCompletions = sqliteTable(
   ],
 );
 
+export const napLogs = sqliteTable(
+  "nap_logs",
+  {
+    id: text("id").primaryKey(),
+    householdId: text("household_id")
+      .notNull()
+      .references(() => households.id, { onDelete: "cascade" }),
+    profileId: text("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    localDate: text("local_date").notNull(),
+    startedAt: integer("started_at", { mode: "timestamp" }).notNull(),
+    endedAt: integer("ended_at", { mode: "timestamp" }),
+    notes: text("notes"),
+    ...timestamps,
+  },
+  (table) => [
+    index("nap_logs_household_date_idx").on(table.householdId, table.localDate),
+    index("nap_logs_profile_idx").on(table.profileId),
+  ],
+);
+
 export const recipes = sqliteTable(
   "recipes",
   {

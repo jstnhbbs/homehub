@@ -19,6 +19,7 @@ final class AppState: ObservableObject {
     @Published var household: Household?
     @Published var dashboard: DashboardData?
     @Published var selectedDestination: HubDestination = .dashboard
+    @Published var showNapsSheet = false
     @Published var pendingProfileEditId: String?
     @Published var isBootstrapping = true
     @Published var errorMessage: String?

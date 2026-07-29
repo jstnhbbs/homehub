@@ -55,9 +55,10 @@ To load `http://` during development, add a temporary ATS exception in Info.plis
 | `src/lib/dates.ts`, `chores.ts`, … | `ios/HomeHub/Utilities/*` |
 | Server actions | `/api/mobile/v1/*` routes |
 | `(hub)/layout.tsx` | `HubView` + sidebar nav |
-| `/dashboard` | `DashboardView` |
+| `/dashboard` | `DashboardView` (includes nap quick log) |
+| `/naps` | `NapsView` (sheet from dashboard; not in sidebar) |
 | `/calendar` | `CalendarView` (read + sync) |
-| `/routines`, `/chores`, `/meals`, `/snacks`, `/recipes` | Matching SwiftUI views |
+| `/routines`, `/chores`, `/meals` (weekly plan + recipes), `/snacks` | Matching SwiftUI views |
 | `/settings` | `SettingsView` |
 
 ## What's implemented vs. next steps
