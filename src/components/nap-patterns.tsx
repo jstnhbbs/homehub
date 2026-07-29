@@ -5,14 +5,16 @@ import { useEffect, useMemo, useState } from "react";
 import { NapHistoryRow } from "@/components/nap-controls";
 import { formatLocalDate } from "@/lib/dates";
 import { weekdayLabels, parseWeekStartsOn } from "@/lib/calendar/week-start";
+import type { SleepKind } from "@/db/schema";
 import {
   childNapsForDate,
-  childWeekNapStats,
-  formatAverageNapCount,
+  childWeekSleepStats,
+  formatAverageSessionCount,
   formatChildDaySummary,
-  formatNapDuration,
-  totalNapMinutes,
+  formatSleepDuration,
+  totalSleepMinutes,
 } from "@/lib/naps/helpers";
+import { sleepLogsOnDate } from "@/lib/naps/overlap";
 import {
   buildAwakeGaps,
   buildDayTimelineBars,
@@ -27,9 +29,10 @@ type ChildProfile = {
   color: string;
 };
 
-type SerializedNap = {
+type SerializedSleepLog = {
   id: string;
   profileId: string;
+  kind: SleepKind;
   localDate: string;
   startedAt: string;
   endedAt: string | null;
@@ -37,28 +40,24 @@ type SerializedNap = {
 
 type NapPatternsProps = {
   childProfiles: ChildProfile[];
-  naps: SerializedNap[];
+  logs: SerializedSleepLog[];
   weekDates: string[];
   todayLocalDate: string;
   timezone: string;
   weekStartsOn: number;
 };
 
-function profileColorStyle(color: string) {
-  return { backgroundColor: color };
-}
-
-function toNapRecords(naps: SerializedNap[]) {
-  return naps.map((nap) => ({
-    ...nap,
-    startedAt: new Date(nap.startedAt),
-    endedAt: nap.endedAt ? new Date(nap.endedAt) : null,
+function toSleepRecords(logs: SerializedSleepLog[]) {
+  return logs.map((log) => ({
+    ...log,
+    startedAt: new Date(log.startedAt),
+    endedAt: log.endedAt ? new Date(log.endedAt) : null,
   }));
 }
 
 export function NapPatternsSection({
   childProfiles,
-  naps,
+  logs,
   weekDates,
   todayLocalDate,
   timezone,
@@ -66,7 +65,7 @@ export function NapPatternsSection({
 }: NapPatternsProps) {
   const [selectedDate, setSelectedDate] = useState(todayLocalDate);
   const [now, setNow] = useState(() => new Date());
-  const napRecords = useMemo(() => toNapRecords(naps), [naps]);
+  const sleepRecords = useMemo(() => toSleepRecords(logs), [logs]);
   const dayLabels = weekdayLabels(parseWeekStartsOn(weekStartsOn));
   const hourLabels = timelineHourLabels();
   const selectedIndex = weekDates.indexOf(selectedDate);
@@ -83,8 +82,17 @@ export function NapPatternsSection({
   );
   const weekStartLabel = formatLocalDate(weekDates[0], timezone, "MMM d");
   const weekEndLabel = formatLocalDate(weekDates[6], timezone, "MMM d");
-  const selectedDayNaps = napRecords.filter((nap) => nap.localDate === selectedDate);
+  const selectedDayLogs = sleepLogsOnDate(sleepRecords, selectedDate, timezone, now);
   const isToday = selectedDate === todayLocalDate;
+
+  function profileColorStyle(color: string) {
+    return { backgroundColor: color };
+  }
+
+  function formatDayCount(napCount: number, nightCount: number) {
+    if (napCount && nightCount) return `${napCount}+${nightCount}`;
+    return String(napCount + nightCount);
+  }
 
   function shiftSelectedDate(delta: number) {
     const nextIndex = selectedIndex + delta;
@@ -119,11 +127,12 @@ export function NapPatternsSection({
         {childProfiles.length ? (
           <div className="mt-5 space-y-8">
             {childProfiles.map((profile) => {
-              const stats = childWeekNapStats(
-                napRecords,
+              const stats = childWeekSleepStats(
+                sleepRecords,
                 profile.id,
                 weekDates,
                 todayLocalDate,
+                timezone,
                 now,
               );
 
@@ -138,8 +147,8 @@ export function NapPatternsSection({
                       <p className="text-sm font-bold">{profile.name}</p>
                     </div>
                     <p className="text-sm font-bold text-[var(--muted)]">
-                      Avg {formatAverageNapCount(stats.avgNapsPerDay)} naps/day ·{" "}
-                      {formatNapDuration(Math.round(stats.avgMinutesPerDay))}/day
+                      Avg {formatAverageSessionCount(stats.avgSessionsPerDay)} sessions/day ·{" "}
+                      {formatSleepDuration(Math.round(stats.avgMinutesPerDay))}/day
                     </p>
                   </div>
 
@@ -168,11 +177,11 @@ export function NapPatternsSection({
                               {formatLocalDate(day.localDate, timezone, "MMM d")}
                             </p>
                             <p className="mt-3 text-lg font-semibold">
-                              {day.napCount}
+                              {formatDayCount(day.napCount, day.nightCount)}
                             </p>
                             <p className="text-xs font-bold text-[var(--muted)]">
-                              {day.napCount
-                                ? formatNapDuration(day.totalMinutes)
+                              {day.napCount || day.nightCount
+                                ? formatSleepDuration(day.totalMinutes)
                                 : "—"}
                             </p>
                           </button>
@@ -202,14 +211,16 @@ export function NapPatternsSection({
                               {block.label}
                             </p>
                             {weekDates.map((localDate) => {
-                              const profileDayNaps = childNapsForDate(
-                                napRecords,
+                              const profileDayLogs = childNapsForDate(
+                                sleepRecords,
                                 profile.id,
                                 localDate,
+                                timezone,
+                                now,
                               );
-                              const active = profileDayNaps.some((nap) =>
+                              const active = profileDayLogs.some((log) =>
                                 napOverlapsHeatmapBlock(
-                                  nap,
+                                  log,
                                   localDate,
                                   timezone,
                                   block,
@@ -244,8 +255,8 @@ export function NapPatternsSection({
                   </div>
 
                   <p className="text-sm font-bold text-[var(--muted)]">
-                    Week total: {stats.totalNaps} naps ·{" "}
-                    {formatNapDuration(stats.totalMinutes)}
+                    Week total: {stats.totalNaps} naps · {stats.totalNights} nights ·{" "}
+                    {formatSleepDuration(stats.totalMinutes)}
                   </p>
                 </div>
               );
@@ -253,7 +264,7 @@ export function NapPatternsSection({
           </div>
         ) : (
           <p className="mt-4 rounded-2xl border border-dashed border-[var(--line)] p-6 text-center text-sm font-bold text-[var(--muted)]">
-            Add a child profile to see weekly nap trends.
+            Add a child profile to see weekly sleep trends.
           </p>
         )}
       </div>
@@ -319,19 +330,21 @@ export function NapPatternsSection({
                 </div>
 
                 {childProfiles.map((profile) => {
-                  const profileDayNaps = childNapsForDate(
-                    napRecords,
+                  const profileDayLogs = childNapsForDate(
+                    sleepRecords,
                     profile.id,
                     selectedDate,
+                    timezone,
+                    now,
                   );
                   const bars = buildDayTimelineBars(
-                    profileDayNaps.map((nap) => ({ ...nap, id: nap.id })),
+                    profileDayLogs,
                     selectedDate,
                     timezone,
                     now,
                   );
                   const gaps = buildAwakeGaps(
-                    profileDayNaps,
+                    profileDayLogs,
                     selectedDate,
                     timezone,
                   );
@@ -347,8 +360,9 @@ export function NapPatternsSection({
                           <p className="text-sm font-bold">{profile.name}</p>
                           <p className="text-xs font-bold text-[var(--muted)]">
                             {formatChildDaySummary(
-                              profileDayNaps.length,
-                              totalNapMinutes(profileDayNaps, now),
+                              profileDayLogs.filter((log) => log.kind === "nap").length,
+                              profileDayLogs.filter((log) => log.kind === "night").length,
+                              totalSleepMinutes(profileDayLogs, now),
                             )}
                           </p>
                         </div>
@@ -385,11 +399,16 @@ export function NapPatternsSection({
                         {bars.map((bar) => (
                           <div
                             key={bar.napId}
-                            className="absolute top-2 bottom-2 rounded-xl px-2 py-1 text-[10px] font-bold text-white shadow-sm"
+                            className={`absolute top-2 bottom-2 rounded-xl px-2 py-1 text-[10px] font-bold shadow-sm ${
+                              bar.kind === "night" ? "text-white/95" : "text-white"
+                            }`}
                             style={{
                               left: `${bar.leftPercent}%`,
                               width: `${bar.widthPercent}%`,
-                              backgroundColor: profile.color,
+                              backgroundColor:
+                                bar.kind === "night"
+                                  ? "color-mix(in srgb, var(--ink) 78%, transparent)"
+                                  : profile.color,
                               minWidth: "2rem",
                             }}
                             title={`${bar.timeLabel} · ${bar.durationLabel}`}
@@ -402,7 +421,7 @@ export function NapPatternsSection({
 
                         {!bars.length ? (
                           <p className="absolute inset-0 flex items-center justify-center text-xs font-bold text-[var(--muted)]">
-                            No naps logged
+                            No sleep logged
                           </p>
                         ) : null}
                       </div>
@@ -415,28 +434,29 @@ export function NapPatternsSection({
             <div className="border-t border-[var(--line)] pt-5">
               <div className="flex items-end justify-between gap-3">
                 <h4 className="font-display text-xl font-semibold">
-                  {isToday ? "Today's naps" : "Naps this day"}
+                  {isToday ? "Today's sleep" : "Sleep this day"}
                 </h4>
                 <p className="text-sm font-bold text-[var(--muted)]">
-                  {formatNapDuration(totalNapMinutes(selectedDayNaps, now))} total
+                  {formatSleepDuration(totalSleepMinutes(selectedDayLogs, now))} total
                 </p>
               </div>
               <div className="mt-4 space-y-2">
-                {selectedDayNaps.length ? (
-                  selectedDayNaps.map((nap) => {
+                {selectedDayLogs.length ? (
+                  selectedDayLogs.map((log) => {
                     const profile = childProfiles.find(
-                      (item) => item.id === nap.profileId,
+                      (item) => item.id === log.profileId,
                     );
                     if (!profile) return null;
                     return (
                       <NapHistoryRow
-                        key={nap.id}
+                        key={log.id}
                         nap={{
-                          id: nap.id,
-                          profileId: nap.profileId,
-                          localDate: nap.localDate,
-                          startedAt: nap.startedAt.toISOString(),
-                          endedAt: nap.endedAt?.toISOString() ?? null,
+                          id: log.id,
+                          profileId: log.profileId,
+                          kind: log.kind,
+                          localDate: log.localDate,
+                          startedAt: log.startedAt.toISOString(),
+                          endedAt: log.endedAt?.toISOString() ?? null,
                         }}
                         profileName={profile.name}
                         profileColor={profile.color}
@@ -446,7 +466,7 @@ export function NapPatternsSection({
                   })
                 ) : (
                   <p className="rounded-2xl border border-dashed border-[var(--line)] p-6 text-center text-sm font-bold text-[var(--muted)]">
-                    No naps logged on this day.
+                    No sleep logged on this day.
                   </p>
                 )}
               </div>

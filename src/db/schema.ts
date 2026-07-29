@@ -257,6 +257,9 @@ export const snackCompletions = sqliteTable(
   ],
 );
 
+export const sleepKinds = ["nap", "night"] as const;
+export type SleepKind = (typeof sleepKinds)[number];
+
 export const napLogs = sqliteTable(
   "nap_logs",
   {
@@ -267,6 +270,7 @@ export const napLogs = sqliteTable(
     profileId: text("profile_id")
       .notNull()
       .references(() => profiles.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<SleepKind>().notNull().default("nap"),
     localDate: text("local_date").notNull(),
     startedAt: integer("started_at", { mode: "timestamp" }).notNull(),
     endedAt: integer("ended_at", { mode: "timestamp" }),

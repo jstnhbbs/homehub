@@ -3,6 +3,7 @@ import Foundation
 struct ChildDayNapStats: Sendable {
     let localDate: String
     let napCount: Int
+    let nightCount: Int
     let totalMinutes: Int
 }
 
@@ -10,6 +11,7 @@ struct ChildWeekNapStats: Sendable {
     let profileId: String
     let days: [ChildDayNapStats]
     let totalNaps: Int
+    let totalNights: Int
     let totalMinutes: Int
     let avgNapsPerDay: Double
     let avgMinutesPerDay: Double
@@ -34,7 +36,29 @@ enum NapHelpers {
     }
 
     static func activeNap(for profileId: String, in naps: [NapLog]) -> NapLog? {
-        naps.first { $0.profileId == profileId && $0.endedAt == nil }
+        naps.first { $0.profileId == profileId && $0.kind == "nap" && $0.endedAt == nil }
+    }
+
+    static func sleepOverlapsLocalDate(_ log: NapLog, localDate: String, timezone: TimeZone, now: Date = .now) -> Bool {
+        guard let dayStart = DateHelpers.dateFromLocalDate(localDate, timezone: timezone),
+              let dayEnd = Calendar(identifier: .gregorian).date(byAdding: .day, value: 1, to: dayStart)?.addingTimeInterval(-0.001) else {
+            return log.localDate == localDate
+        }
+        let sleepEnd = log.endedAt ?? now
+        return log.startedAt <= dayEnd && sleepEnd >= dayStart
+    }
+
+    static func logsForDate(
+        profileId: String?,
+        in logs: [NapLog],
+        localDate: String,
+        timezone: TimeZone,
+        now: Date = .now
+    ) -> [NapLog] {
+        logs.filter { log in
+            (profileId == nil || log.profileId == profileId) &&
+            sleepOverlapsLocalDate(log, localDate: localDate, timezone: timezone, now: now)
+        }
     }
 
     static func todayNaps(for profileId: String, in naps: [NapLog], localDate: String) -> [NapLog] {
@@ -70,9 +94,13 @@ enum NapHelpers {
         return parts.joined(separator: " · ")
     }
 
-    static func daySummary(napCount: Int, totalMinutes: Int) -> String {
-        if napCount == 0 { return "No naps" }
-        return "\(napCount) nap\(napCount == 1 ? "" : "s") · \(formatDuration(minutes: totalMinutes)) total"
+    static func daySummary(napCount: Int, nightCount: Int, totalMinutes: Int) -> String {
+        if napCount == 0 && nightCount == 0 { return "No sleep logged" }
+        var parts: [String] = []
+        if napCount > 0 { parts.append("\(napCount) nap\(napCount == 1 ? "" : "s")") }
+        if nightCount > 0 { parts.append("\(nightCount) night\(nightCount == 1 ? "" : "s")") }
+        parts.append("\(formatDuration(minutes: totalMinutes)) total")
+        return parts.joined(separator: " · ")
     }
 
     static func formatAverageNapCount(_ value: Double) -> String {
@@ -85,26 +113,32 @@ enum NapHelpers {
         naps: [NapLog],
         weekDates: [String],
         todayLocalDate: String,
+        timezone: TimeZone,
         now: Date = .now
     ) -> ChildWeekNapStats {
         let days = weekDates.map { localDate in
-            let dayNaps = todayNaps(for: profileId, in: naps, localDate: localDate)
-            let totalMinutes = dayNaps.reduce(0) { partial, nap in
+            let dayLogs = logsForDate(profileId: profileId, in: naps, localDate: localDate, timezone: timezone, now: now)
+            let napCount = dayLogs.filter { $0.kind == "nap" }.count
+            let nightCount = dayLogs.filter { $0.kind == "night" }.count
+            let totalMinutes = dayLogs.reduce(0) { partial, nap in
                 partial + durationMinutes(startedAt: nap.startedAt, endedAt: nap.endedAt, now: now)
             }
-            return ChildDayNapStats(localDate: localDate, napCount: dayNaps.count, totalMinutes: totalMinutes)
+            return ChildDayNapStats(localDate: localDate, napCount: napCount, totalMinutes: totalMinutes, nightCount: nightCount)
         }
         let elapsedDays = weekDates.filter { $0 <= todayLocalDate }.count
         let totalNaps = days.reduce(0) { $0 + $1.napCount }
+        let totalNights = days.reduce(0) { $0 + $1.nightCount }
         let totalMinutes = days.reduce(0) { $0 + $1.totalMinutes }
         let avgDivisor = max(elapsedDays, 1)
+        let totalSessions = totalNaps + totalNights
 
         return ChildWeekNapStats(
             profileId: profileId,
             days: days,
             totalNaps: totalNaps,
+            totalNights: totalNights,
             totalMinutes: totalMinutes,
-            avgNapsPerDay: Double(totalNaps) / Double(avgDivisor),
+            avgNapsPerDay: Double(totalSessions) / Double(avgDivisor),
             avgMinutesPerDay: Double(totalMinutes) / Double(avgDivisor),
             elapsedDays: elapsedDays
         )
@@ -135,8 +169,8 @@ struct HeatmapBlock: Sendable {
 
 enum NapTimelineHelpers {
     static let startHour = 5
-    static let endHour = 21
-    static let hourLabels = ["5a", "8a", "11a", "2p", "5p", "8p"]
+    static let endHour = 23
+    static let hourLabels = ["5a", "8a", "11a", "2p", "5p", "8p", "11p"]
     static let heatmapBlocks: [HeatmapBlock] = [
         HeatmapBlock(startHour: 5, endHour: 8, label: "5–8a"),
         HeatmapBlock(startHour: 8, endHour: 11, label: "8–11a"),
@@ -165,24 +199,35 @@ enum NapTimelineHelpers {
     }
 
     static func dayTimelineBars(naps: [NapLog], localDate: String, timezone: TimeZone, now: Date = .now) -> [NapTimelineBar] {
-        naps.filter { $0.localDate == localDate }.sorted { $0.startedAt < $1.startedAt }.compactMap { nap in
-            guard let startMinutes = minutesOnLocalDate(nap.startedAt, localDate: localDate, timezone: timezone) else { return nil }
-            let endDate = nap.endedAt ?? now
-            var endMinutes = minutesOnLocalDate(endDate, localDate: localDate, timezone: timezone) ?? endHour * 60
+        naps.filter { NapHelpers.sleepOverlapsLocalDate($0, localDate: localDate, timezone: timezone, now: now) }
+            .sorted { $0.startedAt < $1.startedAt }
+            .compactMap { nap in
+            guard let dayStart = DateHelpers.dateFromLocalDate(localDate, timezone: timezone) else { return nil }
+            let dayEnd = Calendar(identifier: .gregorian).date(byAdding: .day, value: 1, to: dayStart)?.addingTimeInterval(-0.001) ?? dayStart
+            let sleepEnd = nap.endedAt ?? now
+            let overlapStart = max(nap.startedAt, dayStart)
+            let overlapEnd = min(sleepEnd, dayEnd)
+            if overlapStart >= overlapEnd { return nil }
+            guard
+                let startMinutes = minutesOnLocalDate(overlapStart, localDate: localDate, timezone: timezone),
+                var endMinutes = minutesOnLocalDate(overlapEnd, localDate: localDate, timezone: timezone)
+            else { return nil }
+            if endMinutes <= startMinutes { endMinutes = endHour * 60 }
             if endMinutes <= startMinutes { return nil }
             let percents = timelinePercents(startMinutes: startMinutes, endMinutes: endMinutes)
             let duration = NapHelpers.durationMinutes(startedAt: nap.startedAt, endedAt: nap.endedAt, now: now)
+            let label = nap.kind == "night" ? "Night · \(NapHelpers.formatDuration(minutes: duration))" : NapHelpers.formatDuration(minutes: duration)
             return NapTimelineBar(
                 napId: nap.id,
                 leftPercent: percents.left,
                 widthPercent: percents.width,
-                durationLabel: NapHelpers.formatDuration(minutes: duration)
+                durationLabel: label
             )
         }
     }
 
     static func awakeGaps(naps: [NapLog], localDate: String, timezone: TimeZone) -> [AwakeGap] {
-        let sorted = naps.filter { $0.localDate == localDate && $0.endedAt != nil }.sorted { $0.startedAt < $1.startedAt }
+        let sorted = naps.filter { NapHelpers.sleepOverlapsLocalDate($0, localDate: localDate, timezone: timezone) && $0.endedAt != nil }.sorted { $0.startedAt < $1.startedAt }
         var gaps: [AwakeGap] = []
         for index in 1..<sorted.count {
             let previous = sorted[index - 1]
@@ -206,10 +251,17 @@ enum NapTimelineHelpers {
     }
 
     static func overlapsHeatmapBlock(nap: NapLog, localDate: String, timezone: TimeZone, block: HeatmapBlock, now: Date = .now) -> Bool {
-        guard nap.localDate == localDate,
-              let startMinutes = minutesOnLocalDate(nap.startedAt, localDate: localDate, timezone: timezone) else { return false }
-        let endDate = nap.endedAt ?? now
-        let endMinutes = minutesOnLocalDate(endDate, localDate: localDate, timezone: timezone) ?? block.endHour * 60
+        guard NapHelpers.sleepOverlapsLocalDate(nap, localDate: localDate, timezone: timezone, now: now),
+              let dayStart = DateHelpers.dateFromLocalDate(localDate, timezone: timezone) else { return false }
+        let dayEnd = Calendar(identifier: .gregorian).date(byAdding: .day, value: 1, to: dayStart)?.addingTimeInterval(-0.001) ?? dayStart
+        let sleepEnd = nap.endedAt ?? now
+        let overlapStart = max(nap.startedAt, dayStart)
+        let overlapEnd = min(sleepEnd, dayEnd)
+        if overlapStart >= overlapEnd { return false }
+        guard
+            let startMinutes = minutesOnLocalDate(overlapStart, localDate: localDate, timezone: timezone),
+            let endMinutes = minutesOnLocalDate(overlapEnd, localDate: localDate, timezone: timezone)
+        else { return false }
         return startMinutes < block.endHour * 60 && endMinutes > block.startHour * 60
     }
 }

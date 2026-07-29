@@ -4,17 +4,24 @@ import { formatInTimeZone } from "date-fns-tz";
 import { useEffect, useState } from "react";
 import {
   createManualNapAction,
+  createNightSleepAction,
   deleteNapAction,
   endNapAction,
   endNapForProfileAction,
   startNapAction,
   updateNapAction,
-} from "@/app/(hub)/naps/actions";
+} from "@/app/(hub)/sleep/actions";
 import {
   defaultManualStartInput,
   toLocalDateTimeInput,
 } from "@/lib/naps/datetime";
-import { formatNapDuration, formatChildTodayNapSummary, napDurationMinutes } from "@/lib/naps/helpers";
+import {
+  formatSleepDuration,
+  formatChildTodaySleepSummary,
+  napDurationMinutes,
+  sleepKindLabel,
+} from "@/lib/naps/helpers";
+import type { SleepKind } from "@/db/schema";
 
 type ChildProfile = {
   id: string;
@@ -22,9 +29,10 @@ type ChildProfile = {
   color: string;
 };
 
-type NapItem = {
+type SleepItem = {
   id: string;
   profileId: string;
+  kind?: SleepKind;
   localDate: string;
   startedAt: string;
   endedAt: string | null;
@@ -55,7 +63,78 @@ function LiveDuration({
     now,
   );
 
-  return <span>{formatNapDuration(minutes)}</span>;
+  return <span>{formatSleepDuration(minutes)}</span>;
+}
+
+export function ManualNightSleepForm({
+  childProfiles,
+  timezone,
+}: {
+  childProfiles: ChildProfile[];
+  timezone: string;
+}) {
+  const defaultProfileId = childProfiles[0]?.id ?? "";
+  const [profileId, setProfileId] = useState(defaultProfileId);
+  const [fellAsleepAt, setFellAsleepAt] = useState(() =>
+    defaultManualStartInput(timezone),
+  );
+  const [wokeUpAt, setWokeUpAt] = useState(() =>
+    defaultManualStartInput(timezone),
+  );
+
+  return (
+    <form action={createNightSleepAction} className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block space-y-1.5 sm:col-span-2">
+          <span className="text-xs font-extrabold uppercase tracking-[0.14em] text-[var(--muted)]">
+            Child
+          </span>
+          <select
+            name="profileId"
+            className="hub-input"
+            value={profileId}
+            onChange={(event) => setProfileId(event.target.value)}
+            required
+          >
+            {childProfiles.map((profile) => (
+              <option key={profile.id} value={profile.id}>
+                {profile.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block space-y-1.5">
+          <span className="text-xs font-extrabold uppercase tracking-[0.14em] text-[var(--muted)]">
+            Fell asleep
+          </span>
+          <input
+            type="datetime-local"
+            name="fellAsleepAt"
+            className="hub-input"
+            value={fellAsleepAt}
+            onChange={(event) => setFellAsleepAt(event.target.value)}
+            required
+          />
+        </label>
+        <label className="block space-y-1.5">
+          <span className="text-xs font-extrabold uppercase tracking-[0.14em] text-[var(--muted)]">
+            Woke up
+          </span>
+          <input
+            type="datetime-local"
+            name="wokeUpAt"
+            className="hub-input"
+            value={wokeUpAt}
+            onChange={(event) => setWokeUpAt(event.target.value)}
+            required
+          />
+        </label>
+      </div>
+      <button type="submit" className="hub-button">
+        Add night sleep
+      </button>
+    </form>
+  );
 }
 
 export function ManualNapForm({
@@ -135,14 +214,14 @@ export function NapChildRow({
   activeNap,
   timezone,
   compact = false,
-  todayNaps,
+  todayLogs,
   localDate,
 }: {
   profile: ChildProfile;
-  activeNap?: NapItem;
+  activeNap?: SleepItem;
   timezone: string;
   compact?: boolean;
-  todayNaps?: NapItem[];
+  todayLogs?: SleepItem[];
   localDate?: string;
 }) {
   const [now, setNow] = useState(() => new Date());
@@ -157,14 +236,13 @@ export function NapChildRow({
     ? formatInTimeZone(new Date(activeNap.startedAt), timezone, "h:mm a")
     : null;
   const summaryLine =
-    compact && localDate && todayNaps
-      ? formatChildTodayNapSummary(
-          todayNaps.map((nap) => ({
-            localDate: nap.localDate,
-            startedAt: new Date(nap.startedAt),
-            endedAt: nap.endedAt ? new Date(nap.endedAt) : null,
+    compact && localDate && todayLogs
+      ? formatChildTodaySleepSummary(
+          todayLogs.map((log) => ({
+            kind: log.kind ?? "nap",
+            startedAt: new Date(log.startedAt),
+            endedAt: log.endedAt ? new Date(log.endedAt) : null,
           })),
-          localDate,
           now,
           { isActive: !!activeNap },
         )
@@ -231,7 +309,7 @@ export function NapHistoryRow({
   profileColor,
   timezone,
 }: {
-  nap: NapItem;
+  nap: SleepItem;
   profileName: string;
   profileColor: string;
   timezone: string;
@@ -252,6 +330,7 @@ export function NapHistoryRow({
     setEditing(true);
   }
 
+  const kind = nap.kind ?? "nap";
   const startedLabel = formatInTimeZone(
     new Date(nap.startedAt),
     timezone,
@@ -259,7 +338,9 @@ export function NapHistoryRow({
   );
   const endedLabel = nap.endedAt
     ? formatInTimeZone(new Date(nap.endedAt), timezone, "h:mm a")
-    : "In progress";
+    : kind === "night"
+      ? "Unknown"
+      : "In progress";
 
   return (
     <div className="rounded-2xl bg-[var(--tile-quiet)] px-4 py-3">
@@ -273,7 +354,7 @@ export function NapHistoryRow({
             <p className="truncate text-sm font-bold">{profileName}</p>
             {!editing && (
               <p className="text-xs font-bold text-[var(--muted)]">
-                {startedLabel} – {endedLabel} ·{" "}
+                {sleepKindLabel(kind)} · {startedLabel} – {endedLabel} ·{" "}
                 <LiveDuration
                   startedAt={nap.startedAt}
                   endedAt={nap.endedAt}
@@ -283,7 +364,7 @@ export function NapHistoryRow({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {!editing && nap.endedAt == null && (
+          {!editing && nap.endedAt == null && kind === "nap" && (
             <form action={endNapForProfileAction.bind(null, nap.profileId)}>
               <button type="submit" className="hub-button secondary !min-h-8 !px-2 text-xs">
                 End

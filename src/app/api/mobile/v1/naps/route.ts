@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   createManualNap,
+  createNightSleep,
   endNap,
   endNapForProfile,
   fetchNapPageData,
@@ -19,23 +20,14 @@ const isoDate = z.string().datetime();
 export async function GET() {
   try {
     const household = await requireMobileHousehold();
-    const {
-      localDate,
-      yesterdayLocalDate,
-      weekDates,
-      childProfiles,
-      naps,
-      yesterdayNaps,
-      weekNaps,
-    } = await fetchNapPageData(household);
+    const { localDate, weekDates, childProfiles, naps, weekLogs } =
+      await fetchNapPageData(household);
     return mobileJson({
       localDate,
-      yesterdayLocalDate,
       weekDates,
       childProfiles,
       naps: naps.map(serializeNap),
-      yesterdayNaps: yesterdayNaps.map(serializeNap),
-      weekNaps: weekNaps.map(serializeNap),
+      weekLogs: weekLogs.map(serializeNap),
     });
   } catch (error) {
     return handleMobileError(error);
@@ -62,6 +54,12 @@ export async function POST(request: Request) {
           startedAt: isoDate,
           endedAt: isoDate.nullable().optional(),
         }),
+        z.object({
+          action: z.literal("createNight"),
+          profileId: z.string().uuid(),
+          fellAsleepAt: isoDate,
+          wokeUpAt: isoDate,
+        }),
       ])
       .parse(await parseJsonBody(request));
 
@@ -76,6 +74,16 @@ export async function POST(request: Request) {
         input.profileId,
         new Date(input.startedAt),
         input.endedAt ? new Date(input.endedAt) : null,
+      );
+      return mobileJson({ id });
+    }
+
+    if (input.action === "createNight") {
+      const id = await createNightSleep(
+        household,
+        input.profileId,
+        new Date(input.fellAsleepAt),
+        new Date(input.wokeUpAt),
       );
       return mobileJson({ id });
     }

@@ -60,7 +60,7 @@ enum DateHelpers {
         return formatter.string(from: date)
     }
 
-    private static func dateFromLocalDate(_ localDate: String, timezone: TimeZone) -> Date? {
+    static func dateFromLocalDate(_ localDate: String, timezone: TimeZone) -> Date? {
         let parts = localDate.split(separator: "-").compactMap { Int($0) }
         guard parts.count == 3 else { return nil }
         var calendar = Calendar(identifier: .gregorian)
@@ -69,7 +69,9 @@ enum DateHelpers {
         components.year = parts[0]
         components.month = parts[1]
         components.day = parts[2]
-        components.hour = 12
+        components.hour = 0
+        components.minute = 0
+        components.second = 0
         return calendar.date(from: components)
     }
 

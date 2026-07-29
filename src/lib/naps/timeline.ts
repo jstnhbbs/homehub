@@ -1,11 +1,14 @@
 import { formatInTimeZone } from "date-fns-tz";
-import { formatNapDuration, napDurationMinutes } from "@/lib/naps/helpers";
+import type { SleepKind } from "@/db/schema";
+import { formatSleepDuration, napDurationMinutes } from "@/lib/naps/helpers";
+import { localDayBounds, sleepOverlapsLocalDate } from "@/lib/naps/overlap";
 
 export const DEFAULT_TIMELINE_START_HOUR = 5;
-export const DEFAULT_TIMELINE_END_HOUR = 21;
+export const DEFAULT_TIMELINE_END_HOUR = 23;
 
-export type NapTimelineBar = {
+export type SleepTimelineBar = {
   napId: string;
+  kind: SleepKind;
   leftPercent: number;
   widthPercent: number;
   startedAt: Date;
@@ -13,6 +16,9 @@ export type NapTimelineBar = {
   timeLabel: string;
   durationLabel: string;
 };
+
+/** @deprecated Use SleepTimelineBar */
+export type NapTimelineBar = SleepTimelineBar;
 
 export type AwakeGap = {
   leftPercent: number;
@@ -56,7 +62,6 @@ export function timelineHourLabels(
     if (hour === 0) labels.push("12a");
     else if (hour < 12) labels.push(`${hour}a`);
     else if (hour === 12) labels.push("12p");
-    else if (hour >= 21) labels.push(`${hour - 12}p`);
     else labels.push(`${hour - 12}p`);
   }
   return labels;
@@ -89,56 +94,96 @@ export function toTimelinePercents(
   return { leftPercent, widthPercent: Math.max(widthPercent, 1.5) };
 }
 
+function overlapMinutesOnLocalDate<
+  T extends { localDate: string; startedAt: Date; endedAt: Date | null },
+>(
+  log: T,
+  localDate: string,
+  timezone: string,
+  now: Date,
+  startHour: number,
+  endHour: number,
+) {
+  if (!sleepOverlapsLocalDate(log, localDate, timezone, now)) return null;
+
+  const { start: dayStart, end: dayEnd } = localDayBounds(localDate, timezone);
+  const sleepEnd = log.endedAt ?? now;
+  const overlapStart = new Date(Math.max(log.startedAt.getTime(), dayStart.getTime()));
+  const overlapEnd = new Date(Math.min(sleepEnd.getTime(), dayEnd.getTime()));
+  if (overlapStart >= overlapEnd) return null;
+
+  const startMinutes = minutesOnLocalDate(overlapStart, localDate, timezone);
+  let endMinutes = minutesOnLocalDate(overlapEnd, localDate, timezone);
+
+  if (startMinutes == null) {
+    return null;
+  }
+
+  if (endMinutes == null) {
+    endMinutes = timelineRangeEnd(endHour);
+  }
+
+  if (endMinutes <= startMinutes) {
+    return null;
+  }
+
+  return { startMinutes, endMinutes, overlapStart, overlapEnd };
+}
+
 export function buildDayTimelineBars<
   T extends {
     id: string;
+    kind?: SleepKind;
     localDate: string;
     startedAt: Date;
     endedAt: Date | null;
   },
 >(
-  naps: T[],
+  logs: T[],
   localDate: string,
   timezone: string,
   now: Date = new Date(),
   startHour = DEFAULT_TIMELINE_START_HOUR,
   endHour = DEFAULT_TIMELINE_END_HOUR,
-): NapTimelineBar[] {
-  return naps
-    .filter((nap) => nap.localDate === localDate)
+): SleepTimelineBar[] {
+  return logs
+    .filter((log) => sleepOverlapsLocalDate(log, localDate, timezone, now))
     .sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime())
-    .flatMap((nap) => {
-      const startMinutes = minutesOnLocalDate(nap.startedAt, localDate, timezone);
-      if (startMinutes == null) return [];
-
-      const endDate = nap.endedAt ?? now;
-      let endMinutes = minutesOnLocalDate(endDate, localDate, timezone);
-      if (endMinutes == null) {
-        endMinutes = timelineRangeEnd(endHour);
-      }
-      if (endMinutes <= startMinutes) return [];
-
-      const { leftPercent, widthPercent } = toTimelinePercents(
-        startMinutes,
-        endMinutes,
+    .flatMap((log) => {
+      const overlap = overlapMinutesOnLocalDate(
+        log,
+        localDate,
+        timezone,
+        now,
         startHour,
         endHour,
       );
-      const endLabel = nap.endedAt
-        ? formatInTimeZone(nap.endedAt, timezone, "h:mm a")
+      if (!overlap) return [];
+
+      const { leftPercent, widthPercent } = toTimelinePercents(
+        overlap.startMinutes,
+        overlap.endMinutes,
+        startHour,
+        endHour,
+      );
+      const endLabel = log.endedAt
+        ? formatInTimeZone(log.endedAt, timezone, "h:mm a")
         : "Now";
+      const kind = log.kind ?? "nap";
 
       return [
         {
-          napId: nap.id,
+          napId: log.id,
+          kind,
           leftPercent,
           widthPercent,
-          startedAt: nap.startedAt,
-          endedAt: nap.endedAt,
-          timeLabel: `${formatInTimeZone(nap.startedAt, timezone, "h:mm a")} – ${endLabel}`,
-          durationLabel: formatNapDuration(
-            napDurationMinutes(nap.startedAt, nap.endedAt, now),
-          ),
+          startedAt: log.startedAt,
+          endedAt: log.endedAt,
+          timeLabel: `${formatInTimeZone(log.startedAt, timezone, "h:mm a")} – ${endLabel}`,
+          durationLabel:
+            kind === "night"
+              ? `Night · ${formatSleepDuration(napDurationMinutes(log.startedAt, log.endedAt, now))}`
+              : formatSleepDuration(napDurationMinutes(log.startedAt, log.endedAt, now)),
         },
       ];
     });
@@ -146,19 +191,22 @@ export function buildDayTimelineBars<
 
 export function buildAwakeGaps<
   T extends {
+    kind?: SleepKind;
     localDate: string;
     startedAt: Date;
     endedAt: Date | null;
   },
 >(
-  naps: T[],
+  logs: T[],
   localDate: string,
   timezone: string,
   startHour = DEFAULT_TIMELINE_START_HOUR,
   endHour = DEFAULT_TIMELINE_END_HOUR,
 ) {
-  const sorted = naps
-    .filter((nap) => nap.localDate === localDate && nap.endedAt)
+  const sorted = logs
+    .filter(
+      (log) => sleepOverlapsLocalDate(log, localDate, timezone) && log.endedAt,
+    )
     .sort((a, b) => a.startedAt.getTime() - b.startedAt.getTime());
 
   const gaps: AwakeGap[] = [];
@@ -187,7 +235,7 @@ export function buildAwakeGaps<
       leftPercent,
       widthPercent,
       minutes: gapMinutes,
-      label: `Awake ${formatNapDuration(gapMinutes)}`,
+      label: `Awake ${formatSleepDuration(gapMinutes)}`,
     });
   }
 
@@ -195,21 +243,29 @@ export function buildAwakeGaps<
 }
 
 export function napOverlapsHeatmapBlock<
-  T extends { localDate: string; startedAt: Date; endedAt: Date | null },
+  T extends {
+    localDate: string;
+    startedAt: Date;
+    endedAt: Date | null;
+  },
 >(
-  nap: T,
+  log: T,
   localDate: string,
   timezone: string,
   block: HeatmapBlock,
   now: Date = new Date(),
 ) {
-  if (nap.localDate !== localDate) return false;
+  if (!sleepOverlapsLocalDate(log, localDate, timezone, now)) return false;
 
-  const startMinutes = minutesOnLocalDate(nap.startedAt, localDate, timezone);
+  const { start: dayStart, end: dayEnd } = localDayBounds(localDate, timezone);
+  const sleepEnd = log.endedAt ?? now;
+  const overlapStart = new Date(Math.max(log.startedAt.getTime(), dayStart.getTime()));
+  const overlapEnd = new Date(Math.min(sleepEnd.getTime(), dayEnd.getTime()));
+  if (overlapStart >= overlapEnd) return false;
+
+  const startMinutes = minutesOnLocalDate(overlapStart, localDate, timezone);
+  let endMinutes = minutesOnLocalDate(overlapEnd, localDate, timezone);
   if (startMinutes == null) return false;
-
-  const endDate = nap.endedAt ?? now;
-  let endMinutes = minutesOnLocalDate(endDate, localDate, timezone);
   if (endMinutes == null) endMinutes = block.endHour * 60;
 
   const blockStart = block.startHour * 60;

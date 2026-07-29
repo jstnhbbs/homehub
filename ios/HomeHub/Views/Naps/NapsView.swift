@@ -34,7 +34,7 @@ struct NapsView: View {
                 .padding(24)
             }
             .background(HubTheme.surface)
-            .navigationTitle("Nap log")
+            .navigationTitle("Sleep")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Done") { dismiss() }
@@ -55,7 +55,7 @@ struct NapsView: View {
                 .font(.caption.weight(.heavy))
                 .foregroundStyle(HubTheme.sage)
                 .textCase(.uppercase)
-            Text("Track naps")
+            Text("Track sleep")
                 .font(.title2.weight(.semibold))
         }
     }
@@ -64,12 +64,12 @@ struct NapsView: View {
     private func quickLogSection(_ payload: NapsPayload) -> some View {
         HubCard {
             VStack(alignment: .leading, spacing: 12) {
-                Label("Quick log", systemImage: "moon.fill")
+                Label("Nap timer", systemImage: "moon.fill")
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(HubTheme.sage)
 
                 if payload.childProfiles.isEmpty {
-                    EmptyStateView(text: "Add a child profile in Settings to start logging naps.")
+                    EmptyStateView(text: "Add a child profile in Settings to start logging sleep.")
                 } else {
                     ForEach(payload.childProfiles) { profile in
                         NapChildRowView(
@@ -93,11 +93,20 @@ struct NapsView: View {
     @ViewBuilder
     private func manualEntrySection(_ payload: NapsPayload) -> some View {
         HubCard {
-            ManualNapFormView(
-                childProfiles: payload.childProfiles,
-                timezone: TimeZone(identifier: appState.household?.timezone ?? "") ?? .current
-            ) { profileId, startedAt, endedAt in
-                await createNap(profileId: profileId, startedAt: startedAt, endedAt: endedAt)
+            VStack(alignment: .leading, spacing: 16) {
+                ManualNapFormView(
+                    childProfiles: payload.childProfiles,
+                    timezone: TimeZone(identifier: appState.household?.timezone ?? "") ?? .current
+                ) { profileId, startedAt, endedAt in
+                    await createNap(profileId: profileId, startedAt: startedAt, endedAt: endedAt)
+                }
+
+                ManualNightSleepFormView(
+                    childProfiles: payload.childProfiles,
+                    timezone: TimeZone(identifier: appState.household?.timezone ?? "") ?? .current
+                ) { profileId, fellAsleepAt, wokeUpAt in
+                    await createNightSleep(profileId: profileId, fellAsleepAt: fellAsleepAt, wokeUpAt: wokeUpAt)
+                }
             }
         }
     }
@@ -108,7 +117,12 @@ struct NapsView: View {
         let dayLabels = WeekStart.weekdayLabels(weekStartsOn: weekStartsOn)
         let selectedDate = selectedPatternDate ?? payload.localDate
         let selectedIndex = payload.weekDates.firstIndex(of: selectedDate) ?? 0
-        let selectedDayNaps = payload.weekNaps.filter { $0.localDate == selectedDate }
+        let selectedDayLogs = NapHelpers.logsForDate(
+            profileId: nil,
+            in: payload.weekLogs,
+            localDate: selectedDate,
+            timezone: timezone
+        )
 
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
@@ -136,9 +150,10 @@ struct NapsView: View {
                     ForEach(payload.childProfiles) { profile in
                         let stats = NapHelpers.childWeekStats(
                             profileId: profile.id,
-                            naps: payload.weekNaps,
+                            naps: payload.weekLogs,
                             weekDates: payload.weekDates,
                             todayLocalDate: payload.localDate,
+                            timezone: timezone,
                             now: now
                         )
 
@@ -198,8 +213,13 @@ struct NapsView: View {
                                                 .foregroundStyle(HubTheme.muted)
                                                 .frame(width: 48, alignment: .leading)
                                             ForEach(payload.weekDates, id: \.self) { localDate in
-                                                let profileDayNaps = NapHelpers.todayNaps(for: profile.id, in: payload.weekNaps, localDate: localDate)
-                                                let active = profileDayNaps.contains { NapTimelineHelpers.overlapsHeatmapBlock(nap: $0, localDate: localDate, timezone: timezone, block: block, now: now) }
+                                                let profileDayLogs = NapHelpers.logsForDate(
+                                                    profileId: profile.id,
+                                                    in: payload.weekLogs,
+                                                    localDate: localDate,
+                                                    timezone: timezone
+                                                )
+                                                let active = profileDayLogs.contains { NapTimelineHelpers.overlapsHeatmapBlock(nap: $0, localDate: localDate, timezone: timezone, block: block, now: now) }
                                                 Button { selectedPatternDate = localDate } label: {
                                                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                                                         .fill(active ? HubTheme.profileColor(profile.color).opacity(localDate == selectedDate ? 0.72 : 0.42) : HubTheme.tileQuiet)
@@ -247,16 +267,23 @@ struct NapsView: View {
                     }
 
                     ForEach(payload.childProfiles) { profile in
-                        let profileDayNaps = NapHelpers.todayNaps(for: profile.id, in: payload.weekNaps, localDate: selectedDate)
-                        let bars = NapTimelineHelpers.dayTimelineBars(naps: profileDayNaps, localDate: selectedDate, timezone: timezone, now: now)
-                        let gaps = NapTimelineHelpers.awakeGaps(naps: profileDayNaps, localDate: selectedDate, timezone: timezone)
-                        let totalMinutes = profileDayNaps.reduce(0) { $0 + NapHelpers.durationMinutes(startedAt: $1.startedAt, endedAt: $1.endedAt, now: now) }
+                        let profileDayLogs = NapHelpers.logsForDate(
+                            profileId: profile.id,
+                            in: payload.weekLogs,
+                            localDate: selectedDate,
+                            timezone: timezone
+                        )
+                        let bars = NapTimelineHelpers.dayTimelineBars(naps: profileDayLogs, localDate: selectedDate, timezone: timezone, now: now)
+                        let gaps = NapTimelineHelpers.awakeGaps(naps: profileDayLogs, localDate: selectedDate, timezone: timezone)
+                        let totalMinutes = profileDayLogs.reduce(0) { $0 + NapHelpers.durationMinutes(startedAt: $1.startedAt, endedAt: $1.endedAt, now: now) }
+                        let napCount = profileDayLogs.filter { $0.kind == "nap" }.count
+                        let nightCount = profileDayLogs.filter { $0.kind == "night" }.count
 
                         VStack(alignment: .leading, spacing: 8) {
                             HStack(spacing: 8) {
                                 Circle().fill(HubTheme.profileColor(profile.color)).frame(width: 12, height: 12)
                                 Text(profile.name).font(.subheadline.weight(.bold))
-                                Text(NapHelpers.daySummary(napCount: profileDayNaps.count, totalMinutes: totalMinutes))
+                                Text(NapHelpers.daySummary(napCount: napCount, nightCount: nightCount, totalMinutes: totalMinutes))
                                     .font(.caption.weight(.bold)).foregroundStyle(HubTheme.muted)
                             }
 
@@ -290,7 +317,7 @@ struct NapsView: View {
                                     }
 
                                     if bars.isEmpty {
-                                        Text("No naps logged")
+                                        Text("No sleep logged")
                                             .font(.caption.weight(.bold))
                                             .foregroundStyle(HubTheme.muted)
                                             .frame(maxWidth: .infinity)
@@ -303,24 +330,24 @@ struct NapsView: View {
 
                     Divider()
 
-                    Text(selectedDate == payload.localDate ? "Today's naps" : "Naps this day")
+                    Text(selectedDate == payload.localDate ? "Today's sleep" : "Sleep this day")
                         .font(.headline.weight(.semibold))
 
-                    if selectedDayNaps.isEmpty {
-                        Text("No naps logged on this day.")
+                    if selectedDayLogs.isEmpty {
+                        Text("No sleep logged on this day.")
                             .font(.subheadline.weight(.bold))
                             .foregroundStyle(HubTheme.muted)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 16)
                     } else {
-                        ForEach(selectedDayNaps) { nap in
+                        ForEach(selectedDayLogs) { nap in
                             if let profile = payload.childProfiles.first(where: { $0.id == nap.profileId }) {
                                 NapHistoryRowView(
                                     nap: nap,
                                     profile: profile,
                                     timezone: timezone,
                                     now: now,
-                                    endAction: selectedDate == payload.localDate && nap.endedAt == nil ? { await endNap(napId: nap.id) } : nil,
+                                    endAction: selectedDate == payload.localDate && nap.endedAt == nil && nap.kind == "nap" ? { await endNap(napId: nap.id) } : nil,
                                     saveAction: { startedAt, endedAt in
                                         await updateNap(id: nap.id, startedAt: startedAt, endedAt: endedAt)
                                     },
@@ -373,6 +400,16 @@ struct NapsView: View {
     private func createNap(profileId: String, startedAt: Date, endedAt: Date?) async {
         do {
             try await appState.api.createNap(profileId: profileId, startedAt: startedAt, endedAt: endedAt)
+            await appState.refreshDashboard()
+            await load()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func createNightSleep(profileId: String, fellAsleepAt: Date, wokeUpAt: Date) async {
+        do {
+            try await appState.api.createNightSleep(profileId: profileId, fellAsleepAt: fellAsleepAt, wokeUpAt: wokeUpAt)
             await appState.refreshDashboard()
             await load()
         } catch {
@@ -475,6 +512,69 @@ private struct ManualNapFormView: View {
                             startedAt,
                             includeEndTime ? (endedAt ?? startedAt.addingTimeInterval(3600)) : nil
                         )
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(HubTheme.sage)
+                .disabled(selectedProfileId.isEmpty)
+            }
+        }
+    }
+}
+
+private struct ManualNightSleepFormView: View {
+    let childProfiles: [Profile]
+    let timezone: TimeZone
+    let onSubmit: (String, Date, Date) async -> Void
+
+    @State private var selectedProfileId: String
+    @State private var fellAsleepAt: Date
+    @State private var wokeUpAt: Date
+
+    init(
+        childProfiles: [Profile],
+        timezone: TimeZone,
+        onSubmit: @escaping (String, Date, Date) async -> Void
+    ) {
+        self.childProfiles = childProfiles
+        self.timezone = timezone
+        self.onSubmit = onSubmit
+        _selectedProfileId = State(initialValue: childProfiles.first?.id ?? "")
+        _fellAsleepAt = State(initialValue: Date.now.addingTimeInterval(-8 * 3600))
+        _wokeUpAt = State(initialValue: Date.now)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Log night sleep")
+                .font(.title3.weight(.semibold))
+
+            if childProfiles.isEmpty {
+                Text("Add a child profile in Settings to log sleep.")
+                    .font(.footnote)
+                    .foregroundStyle(HubTheme.muted)
+            } else {
+                Picker("Child", selection: $selectedProfileId) {
+                    ForEach(childProfiles) { profile in
+                        Text(profile.name).tag(profile.id)
+                    }
+                }
+
+                DatePicker(
+                    "Fell asleep",
+                    selection: $fellAsleepAt,
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+
+                DatePicker(
+                    "Woke up",
+                    selection: $wokeUpAt,
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+
+                Button("Add night sleep") {
+                    Task {
+                        await onSubmit(selectedProfileId, fellAsleepAt, wokeUpAt)
                     }
                 }
                 .buttonStyle(.borderedProminent)

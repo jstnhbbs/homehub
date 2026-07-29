@@ -5,6 +5,7 @@ import { z } from "zod";
 import { parseLocalDateTimeInput } from "@/lib/naps/datetime";
 import {
   createManualNap,
+  createNightSleep,
   deleteNap,
   endNap,
   endNapForProfile,
@@ -59,6 +60,25 @@ export async function createManualNapAction(formData: FormData) {
     endedAtRaw
       ? parseLocalDateTimeInput(endedAtRaw, household.timezone)
       : null,
+  );
+  revalidatePath("/", "layout");
+}
+
+export async function createNightSleepAction(formData: FormData) {
+  const household = await requireHousehold();
+  const profileId = profileIdSchema.parse(text(formData, "profileId"));
+  const fellAsleepRaw = text(formData, "fellAsleepAt");
+  const wokeUpRaw = text(formData, "wokeUpAt");
+
+  if (!fellAsleepRaw || !wokeUpRaw) {
+    throw new Error("Both sleep and wake times are required.");
+  }
+
+  await createNightSleep(
+    household,
+    profileId,
+    parseLocalDateTimeInput(fellAsleepRaw, household.timezone),
+    parseLocalDateTimeInput(wokeUpRaw, household.timezone),
   );
   revalidatePath("/", "layout");
 }

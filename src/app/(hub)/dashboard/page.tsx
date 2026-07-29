@@ -196,8 +196,8 @@ export default async function DashboardPage() {
   const childProfiles = napData.childProfiles;
   const activeNaps = new Map(
     napData.naps
-      .filter((nap) => !nap.endedAt)
-      .map((nap) => [nap.profileId, nap]),
+      .filter((log) => log.kind === "nap" && !log.endedAt)
+      .map((log) => [log.profileId, log]),
   );
 
   return (
@@ -390,13 +390,13 @@ export default async function DashboardPage() {
         </section>
 
         <section className="hub-card min-h-[245px] p-5 max-md:min-h-0 max-md:p-4">
-          <CardTitle icon={Moon} title="Naps" href="/naps" />
+          <CardTitle icon={Moon} title="Sleep" href="/sleep" />
           <div className="scrollbar-none mt-4 max-h-[180px] space-y-2 overflow-auto">
             {childProfiles.length ? (
               childProfiles.map((profile) => {
                 const activeNap = activeNaps.get(profile.id);
-                const profileNaps = napData.naps.filter(
-                  (nap) => nap.profileId === profile.id,
+                const profileLogs = napData.logs.filter(
+                  (log) => log.profileId === profile.id,
                 );
                 return (
                   <NapChildRow
@@ -407,18 +407,20 @@ export default async function DashboardPage() {
                         ? {
                             id: activeNap.id,
                             profileId: activeNap.profileId,
+                            kind: activeNap.kind,
                             localDate: activeNap.localDate,
                             startedAt: activeNap.startedAt.toISOString(),
                             endedAt: activeNap.endedAt?.toISOString() ?? null,
                           }
                         : undefined
                     }
-                    todayNaps={profileNaps.map((nap) => ({
-                      id: nap.id,
-                      profileId: nap.profileId,
-                      localDate: nap.localDate,
-                      startedAt: nap.startedAt.toISOString(),
-                      endedAt: nap.endedAt?.toISOString() ?? null,
+                    todayLogs={profileLogs.map((log) => ({
+                      id: log.id,
+                      profileId: log.profileId,
+                      kind: log.kind,
+                      localDate: log.localDate,
+                      startedAt: log.startedAt.toISOString(),
+                      endedAt: log.endedAt?.toISOString() ?? null,
                     }))}
                     localDate={napData.localDate}
                     timezone={household.timezone}
@@ -427,7 +429,7 @@ export default async function DashboardPage() {
                 );
               })
             ) : (
-              <EmptyState text="Add a child profile to log naps." href="/settings" />
+              <EmptyState text="Add a child profile to log sleep." href="/settings" />
             )}
           </div>
         </section>
